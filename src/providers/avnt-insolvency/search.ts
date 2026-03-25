@@ -4,7 +4,7 @@
 import { chromium } from "playwright";
 import type { NormalizedCheckResult, RunCheckInput } from "@/lib/types";
 
-export const AVNT_BASE_URL = "https://www.avnt.lt/veikla/nemokumo-procesai/";
+export const AVNT_BASE_URL = "https://nemokumas.avnt.lt/public/case/list";
 
 const NAV_TIMEOUT = 30_000;
 const RESULT_TIMEOUT = 15_000;
@@ -33,12 +33,12 @@ export async function runAvntSearch(
     await page.goto(AVNT_BASE_URL, { waitUntil: "networkidle" });
 
     const nameFieldSelectors = [
-      'input[name="vardas"]',
-      'input[name="name"]',
+      'input[placeholder="Įveskite paieškos žodį..."]',
+      'input[aria-label="Įveskite paieškos žodį..."]',
+      'input[placeholder*="paieškos" i]',
       'input[placeholder*="pavadinimas" i]',
       'input[placeholder*="vardas" i]',
       'input[placeholder*="name" i]',
-      'input[type="text"]:first-of-type',
     ];
 
     let nameFieldFilled = false;
@@ -62,6 +62,7 @@ export async function runAvntSearch(
 
     if (input.idCode) {
       const idFieldSelectors = [
+        'input[aria-label="Juridinio asmens kodas"]',
         'input[name="kodas"]',
         'input[name="code"]',
         'input[placeholder*="kodas" i]',
