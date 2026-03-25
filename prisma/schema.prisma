@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model SearchRun {
+  id                   String   @id @default(cuid())
+  createdAt            DateTime @default(now())
+  createdByEmail       String
+
+  borrowerName         String
+  borrowerIdCode       String?
+  loanReference        String?
+  providerKey          String
+  driveFolderUrl       String
+
+  resultStatus         String
+  resultsCount         Int
+  matchedSummary       String?
+
+  uploadedFileId       String?
+  uploadedFileUrl      String?
+
+  requestPayloadJson   String?
+  normalizedResultJson String?
+}
