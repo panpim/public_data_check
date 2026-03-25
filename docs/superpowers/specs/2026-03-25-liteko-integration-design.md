@@ -102,6 +102,10 @@ interface NormalizedCheckResult {
 
 Playwright launches **non-headless** (`headless: false`). The search form is pre-filled with borrower name (and `idCode` if provided).
 
+### Source URL
+
+`sourceUrl` for LITEKO results: `"https://liteko.teismai.lt/viesasprendimupaieska/"` (the base search portal URL). Used in the PDF screenshot page header and in the `NormalizedCheckResult` returned by the provider.
+
 ### CAPTCHA handling
 
 After pre-filling the form, the provider must register the navigation wait *before* triggering any action that could cause navigation (to avoid a race condition). Use `Promise.all`:
@@ -171,8 +175,12 @@ Validation:
    On failure: set pdfError, skip steps 8–9, go to step 10
 8. Upload PDF to Google Drive folder
    On failure: set driveError, skip step 9
-9. UPDATE all SearchRun rows WHERE runGroupId = ? SET
+9. UPDATE all SearchRun rows WHERE runGroupId = {uuid generated in step 4} SET
         uploadedFileId = fileId, uploadedFileUrl = webViewLink, uploadedFileName = fileName
+   Note: this UPDATE only affects rows written in step 6 of this execution (those sharing
+   the UUID). If a provider threw mid-execution after its row was written, that row was
+   committed to the DB, so the UPDATE will patch it. Rows never written (provider threw
+   before the INSERT) simply don't exist — the UPDATE naturally skips them.
 10. Return 200 response
 ```
 
@@ -181,6 +189,10 @@ Validation:
 **PDF generation failure:** `pdfError` set in response. No upload attempted. All `SearchRun` rows still written (null `uploadedFileId`). Response 200.
 
 **Drive upload failure:** `driveError` set in response. `SearchRun` rows still written (null `uploadedFileId`). Response 200.
+
+**`driveFileName` field in response:** Set to the pre-generated filename string (from step 5) when an upload was attempted, regardless of whether it succeeded or failed. Set to `null` only when PDF generation failed (step 7) and no upload was attempted.
+
+**`normalizedResultJson` column:** Stores the full `NormalizedCheckResult` serialised to JSON (excluding `screenshotBuffer` which is binary — set to `null` before serialisation). This is the authoritative record of the raw provider response and can be used to reconstruct entity-level detail.
 
 ### Response shape
 
@@ -316,15 +328,25 @@ On success, replace the form with:
 Query to build the grouped history view:
 
 ```sql
+-- Step 1: get all non-legacy groups (excludes runGroupId = "")
 SELECT runGroupId, MIN(createdAt) AS groupCreatedAt
 FROM SearchRun
+WHERE runGroupId != ""
 GROUP BY runGroupId
 ORDER BY groupCreatedAt DESC
+
+-- Step 2: get legacy rows (runGroupId = ""), each treated as its own single-row group
+SELECT id, createdAt AS groupCreatedAt
+FROM SearchRun
+WHERE runGroupId = ""
+ORDER BY createdAt DESC
 ```
 
-For each `runGroupId`, fetch all rows in that group to get per-provider status chips.
+Merge the two result sets in descending `groupCreatedAt` order for the final display.
 
-**Legacy rows** (`runGroupId = ""`): treat each legacy row as its own single-provider group — query `WHERE runGroupId = "" ORDER BY createdAt DESC` and display individually, not collapsed together.
+For each non-legacy `runGroupId`: fetch all rows in that group (`WHERE runGroupId = ?`) to get per-provider status chips.
+
+For each legacy row: display it as a single-provider entry using that row's columns directly.
 
 Display per group row:
 - Borrower name (first row in group)
