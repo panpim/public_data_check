@@ -944,7 +944,7 @@ Expected: no errors. If errors reference `RunCheckInput.providerKeys`, `runGroup
 Replace `tests/api/checks-run.test.ts`:
 
 ```typescript
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }));
@@ -1006,6 +1006,7 @@ const mockSearchResult = {
 
 describe("POST /api/checks/run", () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(getServerSession).mockResolvedValue(null);
@@ -1073,6 +1074,7 @@ describe("POST /api/checks/run", () => {
   });
 
   it("continues to next provider when first provider errors", async () => {
+    vi.stubEnv("ENABLE_LITEKO", "true");   // ensure LITEKO is not stripped by feature flag
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     const errorResult = { ...mockSearchResult, status: "error" as const, summaryText: "Search failed" };
@@ -1096,6 +1098,7 @@ describe("POST /api/checks/run", () => {
   });
 
   it("writes one SearchRun row per provider", async () => {
+    vi.stubEnv("ENABLE_LITEKO", "true");   // ensure LITEKO is not stripped
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     vi.mocked(getProvider).mockReturnValue({
