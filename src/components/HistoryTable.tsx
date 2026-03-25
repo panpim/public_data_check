@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { ResultStatus } from "@/lib/types";
 
 interface HistoryRow {
   id: string;
@@ -18,13 +19,13 @@ interface HistoryRow {
   createdByEmail: string;
   borrowerName: string;
   providerKey: string;
-  resultStatus: string;
+  resultStatus: ResultStatus;
   resultsCount: number;
   uploadedFileUrl: string | null;
 }
 
 const STATUS_BADGE: Record<
-  string,
+  ResultStatus,
   {
     label: string;
     variant: "default" | "destructive" | "outline" | "secondary";
@@ -50,13 +51,19 @@ export function HistoryTable() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const limit = 20;
 
   const fetchPage = useCallback(async (p: number) => {
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch(`/api/history?page=${p}&limit=${limit}`);
       const data = await res.json();
+      if (!res.ok) {
+        setFetchError(data.error ?? "Failed to load history");
+        return;
+      }
       setRuns(data.runs ?? []);
       setTotal(data.total ?? 0);
       setPage(p);
@@ -99,6 +106,10 @@ export function HistoryTable() {
           </Button>
         </div>
       </div>
+
+      {fetchError && (
+        <p className="text-sm text-destructive text-center py-4">{fetchError}</p>
+      )}
 
       <div className="rounded-md border">
         <Table>
@@ -154,6 +165,7 @@ export function HistoryTable() {
                         href={run.uploadedFileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label={`Open PDF for ${run.borrowerName}`}
                         className="text-blue-500 hover:underline text-sm"
                       >
                         ↗

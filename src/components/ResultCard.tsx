@@ -50,7 +50,7 @@ export function ResultCard({
           {label}
         </Badge>
         <span className="text-sm text-muted-foreground">
-          {resultsCount} result(s)
+          {resultsCount} {resultsCount === 1 ? "result" : "results"}
         </span>
       </div>
       <p className="text-sm">{summaryText}</p>

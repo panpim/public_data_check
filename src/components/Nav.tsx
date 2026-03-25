@@ -42,7 +42,7 @@ export function Nav() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ callbackUrl: "/api/auth/signin" })}
           >
             Sign out
           </Button>
