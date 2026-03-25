@@ -103,7 +103,7 @@ export function CheckForm() {
 
         <div className="space-y-2">
           <Label htmlFor="registry">Registry</Label>
-          <Select value={providerKey} onValueChange={setProviderKey}>
+          <Select value={providerKey} onValueChange={(v) => { if (v !== null) setProviderKey(v); }}>
             <SelectTrigger id="registry">
               <SelectValue />
             </SelectTrigger>
