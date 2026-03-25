@@ -54,55 +54,61 @@ export async function POST(req: NextRequest) {
     providerKey,
   };
 
-  const result = await provider.runSearch(input);
-
-  const filename = `${providerKey}_${input.borrowerName.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
-  const pdfBuffer = await generateEvidencePdf(input, result, filename);
-
-  let uploadedFileId: string | undefined;
-  let uploadedFileUrl: string | undefined;
-  let driveError: string | undefined;
-
   try {
-    const uploaded = await uploadFileToDrive(
-      session.accessToken,
-      folderId,
-      filename,
-      pdfBuffer
-    );
-    uploadedFileId = uploaded.fileId;
-    uploadedFileUrl = uploaded.webViewLink;
-  } catch (err) {
-    driveError = err instanceof Error ? err.message : String(err);
-  }
+    const result = await provider.runSearch(input);
 
-  const run = await db.searchRun.create({
-    data: {
-      createdByEmail: session.user.email!,
-      borrowerName: input.borrowerName,
-      borrowerIdCode: input.idCode,
-      loanReference: input.loanReference,
-      providerKey,
-      driveFolderUrl,
-      resultStatus: result.status,
+    const filename = `${providerKey}_${input.borrowerName.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+    const pdfBuffer = await generateEvidencePdf(input, result, filename);
+
+    let uploadedFileId: string | undefined;
+    let uploadedFileUrl: string | undefined;
+    let driveError: string | undefined;
+
+    try {
+      const uploaded = await uploadFileToDrive(
+        session.accessToken,
+        folderId,
+        filename,
+        pdfBuffer
+      );
+      uploadedFileId = uploaded.fileId;
+      uploadedFileUrl = uploaded.webViewLink;
+    } catch (err) {
+      driveError = err instanceof Error ? err.message : String(err);
+    }
+
+    const run = await db.searchRun.create({
+      data: {
+        createdByEmail: session.user.email,
+        borrowerName: input.borrowerName,
+        borrowerIdCode: input.idCode,
+        loanReference: input.loanReference,
+        providerKey,
+        driveFolderUrl,
+        resultStatus: result.status,
+        resultsCount: result.resultsCount,
+        matchedSummary: result.summaryText,
+        uploadedFileId,
+        uploadedFileUrl,
+        requestPayloadJson: JSON.stringify(input),
+        // Omit screenshotBuffer (binary) from the stored JSON
+        normalizedResultJson: JSON.stringify({
+          ...result,
+          screenshotBuffer: undefined,
+        }),
+      },
+    });
+
+    return NextResponse.json({
+      runId: run.id,
+      status: result.status,
       resultsCount: result.resultsCount,
-      matchedSummary: result.summaryText,
-      uploadedFileId,
-      uploadedFileUrl,
-      requestPayloadJson: JSON.stringify(input),
-      normalizedResultJson: JSON.stringify({
-        ...result,
-        screenshotBuffer: undefined,
-      }),
-    },
-  });
-
-  return NextResponse.json({
-    runId: run.id,
-    status: result.status,
-    resultsCount: result.resultsCount,
-    summaryText: result.summaryText,
-    driveUrl: uploadedFileUrl,
-    ...(driveError ? { driveError } : {}),
-  });
+      summaryText: result.summaryText,
+      driveUrl: uploadedFileUrl,
+      ...(driveError ? { driveError } : {}),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

@@ -10,11 +10,10 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-  const limit = Math.min(
-    100,
-    Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10))
-  );
+  const rawPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "20", 10);
+  const page = Math.max(1, isNaN(rawPage) ? 1 : rawPage);
+  const limit = Math.min(100, Math.max(1, isNaN(rawLimit) ? 20 : rawLimit));
   const skip = (page - 1) * limit;
 
   const [runs, total] = await Promise.all([
