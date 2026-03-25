@@ -5,6 +5,11 @@ const providers: Record<CheckProviderKey, PublicCheckProvider> = {
   avnt_insolvency: new AvntInsolvencyProvider(),
 };
 
+function isCheckProviderKey(key: string): key is CheckProviderKey {
+  return key in providers;
+}
+
 export function getProvider(key: string): PublicCheckProvider | null {
-  return providers[key as CheckProviderKey] ?? null;
+  if (!isCheckProviderKey(key)) return null;
+  return providers[key];
 }

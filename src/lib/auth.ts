@@ -1,5 +1,6 @@
 import GoogleProvider from "next-auth/providers/google";
 import type { NextAuthOptions } from "next-auth";
+import "@/lib/types";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -26,7 +27,7 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.accessToken as string;
+      session.accessToken = token.accessToken as string;
       return session;
     },
   },
