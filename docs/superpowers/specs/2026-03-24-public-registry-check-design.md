@@ -149,6 +149,10 @@ model SearchRun {
 
 ## Services
 
+### registry.ts
+
+A simple key → provider map. Each entry maps a `CheckProviderKey` string to a class implementing `PublicCheckProvider` (which exposes a single `runSearch(input): Promise<NormalizedCheckResult>` method). Adding a provider requires one line here plus a new folder under `src/providers/`.
+
 ### drive.ts
 
 ```typescript
@@ -161,6 +165,12 @@ uploadFileToDrive(
 ```
 
 Uses `drive.file` scope — the app can only touch files it created. No service account required.
+
+**Accepted Drive folder URL formats:**
+- `https://drive.google.com/drive/folders/<folderId>`
+- `https://drive.google.com/drive/u/0/folders/<folderId>`
+
+Malformed or unrecognised URLs are rejected with a 400 before the search runs. Shared-drive URLs are not supported in v1.
 
 ---
 
@@ -182,7 +192,7 @@ Uses `drive.file` scope — the app can only touch files it created. No service 
 | `Nav.tsx` | Top bar with links, signed-in email, sign out |
 | `CheckForm.tsx` | Controlled form, calls POST /api/checks/run, shows loading state |
 | `ResultCard.tsx` | Coloured result badge (green/red/amber/grey) + Drive link |
-| `HistoryTable.tsx` | Paginated table, fetches GET /api/history, Drive link per row |
+| `HistoryTable.tsx` | Paginated table, fetches `GET /api/history?page=<n>&limit=20`, Drive link per row |
 
 ### Result badge colours
 
@@ -204,6 +214,14 @@ Uses `drive.file` scope — the app can only touch files it created. No service 
 | `NEXTAUTH_URL` | Public URL (e.g. `http://localhost:3000`) |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret |
+
+---
+
+## Deployment Requirements
+
+Checks run **synchronously** in the API route (~10–25 s). This requires a long-running server — **not** a serverless platform with short timeouts. Recommended: Railway or Render. Vercel is not suitable.
+
+On token expiry (Drive 401), the UI receives an error response and prompts the user to sign out and back in to refresh credentials. No automatic retry — the user re-submits the form. No partial audit row is written in this case.
 
 ---
 
