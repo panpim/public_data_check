@@ -45,7 +45,10 @@ export async function runAvntSearch(
     for (const selector of nameFieldSelectors) {
       try {
         await page.waitForSelector(selector, { timeout: 3_000 });
-        await page.fill(selector, input.borrowerName);
+        await page.click(selector);
+        await page.fill(selector, "");
+        // Type character by character so AngularJS detects each keystroke
+        await page.locator(selector).pressSequentially(input.borrowerName, { delay: 40 });
         nameFieldFilled = true;
         break;
       } catch {
@@ -104,7 +107,8 @@ export async function runAvntSearch(
     await page
       .waitForLoadState("networkidle", { timeout: RESULT_TIMEOUT })
       .catch(() => {});
-    await page.waitForTimeout(1_500);
+    // Wait for AngularJS to re-render results after filtering
+    await page.waitForTimeout(2_500);
 
     const screenshotBuffer = await page.screenshot({ fullPage: true });
     const finalUrl = page.url();
