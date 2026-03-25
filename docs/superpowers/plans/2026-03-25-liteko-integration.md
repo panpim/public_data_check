@@ -888,10 +888,32 @@ npm test
 
 Expected: evidence tests pass (5); checks-run tests still fail (route not yet updated — expected).
 
+- [ ] **Step 5b: Patch `route.ts` call site to use the new array signature**
+
+The `generateEvidencePdf` call in `src/app/api/checks/run/route.ts` (line ~83) passes a single `result` object. After the signature change it expects an array. Wrap it:
+
+Find:
+```typescript
+pdfBuffer = await generateEvidencePdf(input, result, filename);
+```
+
+Replace with:
+```typescript
+pdfBuffer = await generateEvidencePdf(input, [result], filename);
+```
+
+- [ ] **Step 5c: Run tsc — expect clean**
+
+```bash
+npx tsc --noEmit
+```
+
+Expected: no errors. If TypeScript complains about `route.ts`, fix the specific line before proceeding.
+
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/services/evidence.ts tests/services/evidence.test.ts
+git add src/services/evidence.ts tests/services/evidence.test.ts src/app/api/checks/run/route.ts
 git commit -m "feat: rewrite evidence PDF to support multiple providers and use runGroupId"
 ```
 
