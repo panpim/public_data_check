@@ -1138,9 +1138,11 @@ import { db } from "@/lib/db";
 import type { RunCheckInput, NormalizedCheckResult, CheckProviderKey } from "@/lib/types";
 
 const VALID_PROVIDER_KEYS: CheckProviderKey[] = ["avnt_insolvency", "liteko_court_cases"];
-const LITEKO_ENABLED = process.env.ENABLE_LITEKO === "true";
 
 export async function POST(req: NextRequest) {
+  // Read flag inside handler so vi.stubEnv() works in tests without vi.resetModules()
+  const LITEKO_ENABLED = process.env.ENABLE_LITEKO === "true";
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.email || !session.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -1792,7 +1794,7 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   // Step 1: Get non-legacy groups (runGroupId != ""), paginated
-  const groupRows = await db.$queryRaw<{ runGroupId: string; groupCreatedAt: Date }[]>`
+  const groupRows = await db.$queryRaw<{ runGroupId: string; groupCreatedAt: string }[]>`  // string, not Date — SQLite returns ISO text via better-sqlite3 adapter
     SELECT runGroupId, MIN(createdAt) AS groupCreatedAt
     FROM SearchRun
     WHERE runGroupId != ''
@@ -2111,6 +2113,16 @@ export function CheckForm() {
                   </span>
                 </div>
                 <p className="text-sm">{r.summaryText}</p>
+                {result.driveWebViewLink && (
+                  <a
+                    href={result.driveWebViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-500 hover:underline"
+                  >
+                    View PDF in Drive →
+                  </a>
+                )}
               </div>
             );
           })}
