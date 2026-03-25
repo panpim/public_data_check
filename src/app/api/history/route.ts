@@ -1,0 +1,43 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { db } from "@/lib/db";
+
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10))
+  );
+  const skip = (page - 1) * limit;
+
+  const [runs, total] = await Promise.all([
+    db.searchRun.findMany({
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        createdByEmail: true,
+        borrowerName: true,
+        borrowerIdCode: true,
+        loanReference: true,
+        providerKey: true,
+        resultStatus: true,
+        resultsCount: true,
+        matchedSummary: true,
+        uploadedFileUrl: true,
+      },
+    }),
+    db.searchRun.count(),
+  ]);
+
+  return NextResponse.json({ runs, total, page, limit });
+}
