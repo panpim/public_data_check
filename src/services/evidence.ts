@@ -53,20 +53,20 @@ export async function generateEvidencePdf(
   y -= 18;
   drawRow(cover, regular, bold, "Search timestamp:", formatDate(result.searchedAt), margin, y);
   y -= 18;
-  drawRow(cover, regular, bold, "Initiated by:", input.initiatedByEmail, margin, y);
+  drawRow(cover, regular, bold, "Initiated by:", sanitizeForPdf(input.initiatedByEmail), margin, y);
   y -= 18;
   drawRow(cover, regular, bold, "Request ID:", requestId, margin, y);
   y -= 18;
-  drawRow(cover, regular, bold, "Evidence filename:", filename, margin, y);
+  drawRow(cover, regular, bold, "Evidence filename:", sanitizeForPdf(filename), margin, y);
   y -= 30;
 
   drawSection(cover, bold, "Search Input", margin, y, width - margin * 2);
   y -= 20;
-  drawRow(cover, regular, bold, "Borrower name:", input.borrowerName, margin, y);
+  drawRow(cover, regular, bold, "Borrower name:", sanitizeForPdf(input.borrowerName), margin, y);
   y -= 18;
-  drawRow(cover, regular, bold, "ID code:", input.idCode ?? "(not provided)", margin, y);
+  drawRow(cover, regular, bold, "ID code:", sanitizeForPdf(input.idCode ?? "(not provided)"), margin, y);
   y -= 18;
-  drawRow(cover, regular, bold, "Loan reference:", input.loanReference ?? "(not provided)", margin, y);
+  drawRow(cover, regular, bold, "Loan reference:", sanitizeForPdf(input.loanReference ?? "(not provided)"), margin, y);
   y -= 18;
   drawRow(cover, regular, bold, "Source URL:", result.sourceUrl, margin, y, 9);
   y -= 30;
@@ -109,7 +109,7 @@ export async function generateEvidencePdf(
   drawRow(cover, regular, bold, "Results count:", String(result.resultsCount), margin, y);
   y -= 18;
 
-  const summaryLines = wrapText(result.summaryText, 90);
+  const summaryLines = wrapText(sanitizeForPdf(result.summaryText), 90);
   cover.drawText("Summary:", { x: margin, y, font: bold, size: 9, color: GREY });
   y -= 14;
   for (const line of summaryLines) {
@@ -122,7 +122,7 @@ export async function generateEvidencePdf(
     drawSection(cover, bold, "Matched Entities", margin, y, width - margin * 2);
     y -= 20;
     for (const entity of result.matchedEntities.slice(0, 20)) {
-      const entityLine = [entity.name, entity.caseNumber ? `Case: ${entity.caseNumber}` : "", entity.status ?? ""]
+      const entityLine = [sanitizeForPdf(entity.name), entity.caseNumber ? `Case: ${entity.caseNumber}` : "", entity.status ?? ""]
         .filter(Boolean)
         .join("  |  ");
       const wrapped = wrapText(entityLine, 90);
@@ -243,4 +243,22 @@ function getProviderLabel(key: string): string {
     avnt_insolvency: "Insolvency check — AVNT",
   };
   return labels[key] ?? key;
+}
+
+/**
+ * Transliterate Lithuanian and other non-WinAnsi characters so pdf-lib's
+ * standard Helvetica font (which uses WinAnsiEncoding / Latin-1) can render them.
+ */
+function sanitizeForPdf(text: string): string {
+  return text
+    .replace(/[Ąą]/g, (c) => (c === c.toUpperCase() ? "A" : "a"))
+    .replace(/[Čč]/g, (c) => (c === c.toUpperCase() ? "C" : "c"))
+    .replace(/[Ęę]/g, (c) => (c === c.toUpperCase() ? "E" : "e"))
+    .replace(/[Ėė]/g, (c) => (c === c.toUpperCase() ? "E" : "e"))
+    .replace(/[Įį]/g, (c) => (c === c.toUpperCase() ? "I" : "i"))
+    .replace(/[Šš]/g, (c) => (c === c.toUpperCase() ? "S" : "s"))
+    .replace(/[Ųų]/g, (c) => (c === c.toUpperCase() ? "U" : "u"))
+    .replace(/[Ūū]/g, (c) => (c === c.toUpperCase() ? "U" : "u"))
+    .replace(/[Žž]/g, (c) => (c === c.toUpperCase() ? "Z" : "z"))
+    .replace(/[^\x00-\xFF]/g, "?");
 }

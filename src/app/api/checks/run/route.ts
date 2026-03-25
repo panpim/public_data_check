@@ -78,10 +78,11 @@ export async function POST(req: NextRequest) {
     const filename = `${providerKey}_${safeName}_${Date.now()}.pdf`;
 
     let pdfBuffer: Buffer | undefined;
+    let pdfError: string | undefined;
     try {
       pdfBuffer = await generateEvidencePdf(input, result, filename);
-    } catch {
-      // PDF generation failed — continue without PDF
+    } catch (err) {
+      pdfError = err instanceof Error ? err.message : String(err);
     }
 
     let uploadedFileId: string | undefined;
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
       summaryText: result.summaryText,
       driveUrl: uploadedFileUrl,
       ...(driveError ? { driveError } : {}),
+      ...(pdfError ? { driveError: `PDF generation failed: ${pdfError}` } : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
