@@ -14,13 +14,19 @@ const STATUS_CONFIG: Record<
   {
     label: string;
     variant: "default" | "destructive" | "outline" | "secondary";
+    className?: string;
   }
 > = {
-  no_match: { label: "NO RECORD FOUND", variant: "default" },
+  no_match: {
+    label: "NO RECORD FOUND",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
   match_found: { label: "RECORD FOUND", variant: "destructive" },
   ambiguous: {
     label: "AMBIGUOUS — MANUAL REVIEW REQUIRED",
-    variant: "secondary",
+    variant: "outline",
+    className: "border-amber-500 bg-amber-500 text-white",
   },
   error: { label: "TECHNICAL ERROR", variant: "outline" },
 };
@@ -32,14 +38,14 @@ export function ResultCard({
   driveUrl,
   driveError,
 }: Props) {
-  const { label, variant } = STATUS_CONFIG[status] ?? STATUS_CONFIG.error;
+  const { label, variant, className: statusClassName } = STATUS_CONFIG[status] ?? STATUS_CONFIG.error;
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
       <div className="flex items-center gap-3">
         <Badge
           variant={variant}
-          className="text-xs font-bold tracking-wide px-3 py-1"
+          className={`text-xs font-bold tracking-wide px-3 py-1${statusClassName ? ` ${statusClassName}` : ""}`}
         >
           {label}
         </Badge>

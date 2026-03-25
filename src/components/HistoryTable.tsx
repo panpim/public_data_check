@@ -28,11 +28,20 @@ const STATUS_BADGE: Record<
   {
     label: string;
     variant: "default" | "destructive" | "outline" | "secondary";
+    className?: string;
   }
 > = {
-  no_match: { label: "No match", variant: "default" },
+  no_match: {
+    label: "No match",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
   match_found: { label: "Match", variant: "destructive" },
-  ambiguous: { label: "Ambiguous", variant: "secondary" },
+  ambiguous: {
+    label: "Ambiguous",
+    variant: "outline",
+    className: "border-amber-500 bg-amber-500 text-white",
+  },
   error: { label: "Error", variant: "outline" },
 };
 
@@ -132,7 +141,7 @@ export function HistoryTable() {
                     {run.providerKey.replace(/_/g, " ")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={badge.variant} className="text-xs">
+                    <Badge variant={badge.variant} className={`text-xs${badge.className ? ` ${badge.className}` : ""}`}>
                       {badge.label}
                     </Badge>
                   </TableCell>
