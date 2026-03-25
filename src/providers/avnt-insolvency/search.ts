@@ -150,8 +150,50 @@ function parseAvntResults(
   NormalizedCheckResult,
   "status" | "resultsCount" | "matchedEntities" | "summaryText"
 > {
-  const lower = bodyText.toLowerCase();
+  const lines = bodyText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
 
+  const matchedEntities = lines
+    .filter((l) =>
+      l.toLowerCase().includes(borrowerName.toLowerCase().split(" ")[0])
+    )
+    .slice(0, 10)
+    .map((l) => ({ name: l }));
+
+  // Primary signal: "Rodomi X - Y iš Z įrašų" (Showing X-Y of Z records)
+  const countMatch = bodyText.match(
+    /rodomi\s+\d+\s*[-–]\s*\d+\s+iš\s+(\d+)\s+įrašų/i
+  );
+  if (countMatch) {
+    const count = parseInt(countMatch[1], 10);
+    if (count === 0) {
+      return {
+        status: "no_match",
+        resultsCount: 0,
+        matchedEntities: [],
+        summaryText: `No insolvency records found on AVNT for the name "${borrowerName}".`,
+      };
+    }
+    if (count === 1) {
+      return {
+        status: "match_found",
+        resultsCount: 1,
+        matchedEntities,
+        summaryText: `1 insolvency record found on AVNT matching "${borrowerName}".`,
+      };
+    }
+    return {
+      status: "ambiguous",
+      resultsCount: count,
+      matchedEntities,
+      summaryText: `${count} insolvency records found on AVNT for "${borrowerName}". Manual review required.`,
+    };
+  }
+
+  // Fallback: explicit no-result signals
+  const lower = bodyText.toLowerCase();
   const noResultSignals = [
     "nerasta",
     "rezultatų nerasta",
@@ -170,10 +212,11 @@ function parseAvntResults(
     };
   }
 
+  // Fallback: keyword stems (handles Lithuanian inflection)
   const recordSignals = [
-    "bankrotas",
-    "restruktūrizavimas",
-    "nemokumas",
+    "bankrot",
+    "restruktūrizav",
+    "nemokum",
     "insolvency",
     "bankruptcy",
   ];
@@ -191,26 +234,14 @@ function parseAvntResults(
       matchedEntities: [],
       summaryText:
         "Search page loaded but result could not be clearly parsed. " +
-        "Please review the attached screenshot.",
+        "Please review the screenshot in the PDF.",
     };
   }
 
-  const lines = bodyText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const matchedEntities = lines
-    .filter((l) =>
-      l.toLowerCase().includes(borrowerName.toLowerCase().split(" ")[0])
-    )
-    .slice(0, 10)
-    .map((l) => ({ name: l }));
-
-  const status = recordCount > 1 ? "ambiguous" : "match_found";
-  const summaryText =
-    status === "match_found"
-      ? `1 insolvency record found on AVNT matching "${borrowerName}".`
-      : `${recordCount} possible insolvency records found on AVNT for "${borrowerName}". Manual review required.`;
-
-  return { status, resultsCount: recordCount, matchedEntities, summaryText };
+  return {
+    status: "match_found",
+    resultsCount: recordCount,
+    matchedEntities,
+    summaryText: `${recordCount} insolvency record(s) found on AVNT matching "${borrowerName}".`,
+  };
 }
