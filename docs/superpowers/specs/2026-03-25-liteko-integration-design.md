@@ -192,7 +192,7 @@ Validation:
 4. Generate runGroupId (uuid v4)
 5. Generate PDF filename: {sanitized_borrower_name}_{date_YYYYMMDD}_evidence.pdf
    where sanitized_borrower_name = borrowerName.replace(/[^a-zA-Z0-9]/g, "_")
-6. For each providerKey in providerKeys (sequential, AVNT first if both present):
+6. For each providerKey in providerKeys (sequential, LITEKO first if both present — requires user CAPTCHA action, so run while user is present; AVNT runs automated after):
    a. Run provider search → NormalizedCheckResult
    b. Write SearchRun row:
         { runGroupId, providerKey, borrowerName, borrowerIdCode (=idCode),
@@ -272,7 +272,7 @@ The existing signature `generateEvidencePdf(input, result, filename)` (single re
 ```typescript
 export async function generateEvidencePdf(
   input: RunCheckInput,              // carries runGroupId for PDF audit trail
-  results: NormalizedCheckResult[],  // array, ordered AVNT first
+  results: NormalizedCheckResult[],  // array, ordered LITEKO first
   filename: string
 ): Promise<Buffer>
 ```
@@ -287,7 +287,7 @@ export async function generateEvidencePdf(
 |----------|-------|
 | AVNT only | Page 1: summary · Page 2: AVNT screenshot (if buffer present) |
 | LITEKO only | Page 1: summary · Page 2: LITEKO screenshot (if buffer present) |
-| Both | Page 1: summary · Page 2: AVNT screenshot · Page 3: LITEKO screenshot |
+| Both | Page 1: summary · Page 2: LITEKO screenshot · Page 3: AVNT screenshot |
 
 Screenshot pages only added when `result.screenshotBuffer !== null`.
 
@@ -341,7 +341,7 @@ Replace the registry `<select>` with two checkboxes:
 The form submit issues a single `fetch POST /api/checks/run` and awaits the full response. While awaiting:
 
 - If `providerKeys` sent in the request includes `"liteko_court_cases"`:
-  Show: **"Running checks… A browser window has opened on this machine — solve the CAPTCHA to continue."** with a spinner
+  Show: **"Running checks… A browser window has opened on this machine — solve the CAPTCHA to continue. AVNT will run automatically after."** with a spinner
 - Otherwise:
   Show: **"Running check…"** with a spinner
 
@@ -382,7 +382,7 @@ For each legacy row: display it as a single-provider entry using that row's colu
 Display per group row:
 - Borrower name (first row in group)
 - Date (`groupCreatedAt`)
-- Per-provider status chips (one per row in group, ordered AVNT first)
+- Per-provider status chips (one per row in group, ordered LITEKO first if present, then AVNT)
 - PDF link from first non-null `uploadedFileUrl` in group
 
 ---
