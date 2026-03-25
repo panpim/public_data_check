@@ -18,40 +18,52 @@ Each form submission generates a `runGroupId` (UUID v4). Every `SearchRun` row w
 
 ### Schema migration
 
-The existing `SearchRun` table (fields: `id`, `createdAt`, `createdByEmail`, `borrowerName`, `borrowerIdCode`, `loanReference`, `providerKey`, `driveFolderUrl`, `resultStatus`, `resultsCount`, `matchedSummary`, `uploadedFileId`, `uploadedFileUrl`, `requestPayloadJson`, `normalizedResultJson`) gains two new columns only — no renames:
+The existing `SearchRun` table gains two new columns only — no existing column names are changed:
 
-| New column | Type | Purpose |
+| New column | Type | Notes |
 |---|---|---|
-| `runGroupId` | `String` (default `""`) | Links rows from the same form submission |
-| `uploadedFileName` | `String?` | Human-readable PDF filename stored alongside `uploadedFileId` |
-
-All existing columns and their names are preserved. Existing rows get `runGroupId = ""`.
+| `runGroupId` | `String @default("")` | Links rows from the same form submission. Legacy rows get `""`. |
+| `uploadedFileName` | `String?` | Human-readable PDF filename, stored alongside `uploadedFileId`. |
 
 ```prisma
-// Add to existing SearchRun model:
-runGroupId      String   @default("")
+// Add to existing SearchRun model (no other changes):
+runGroupId       String   @default("")
 uploadedFileName String?
 ```
 
 ### Drive service update
 
-`src/services/drive.ts` currently returns `{ fileId: string, webViewLink: string }`. Update it to also return `fileName: string` (the filename passed to the upload call). New return type:
+`src/services/drive.ts` currently returns `{ fileId: string, webViewLink: string }`. Update to also return `fileName: string` (the filename argument passed to the upload call, echoed back so the API layer can store it without a second variable):
 
 ```typescript
+// New return type:
 { fileId: string; webViewLink: string; fileName: string }
 ```
 
-The API stores `fileId` → `uploadedFileId`, `webViewLink` → `uploadedFileUrl`, `fileName` → `uploadedFileName`.
+The API stores: `fileId` → `uploadedFileId`, `webViewLink` → `uploadedFileUrl`, `fileName` → `uploadedFileName`.
 
 ---
 
-## 2. LITEKO Provider
+## 2. Types
 
-**File:** `src/providers/liteko-court-cases/search.ts`
+Defined in `src/lib/types.ts`. No new files needed.
 
-### Types
+### `RunCheckInput`
 
-`MatchedEntity` (shared with AVNT, defined in `src/lib/types.ts`):
+```typescript
+interface RunCheckInput {
+  providerKeys: string[];
+  borrowerName: string;
+  idCode?: string;
+  loanReference?: string;
+  driveFolderUrl: string;
+  initiatedByEmail: string;  // = session user email
+}
+```
+
+### `MatchedEntity`
+
+Shared between AVNT and LITEKO. AVNT uses `name`, `caseNumber`, `status`. LITEKO uses all five fields.
 
 ```typescript
 interface MatchedEntity {
@@ -63,9 +75,9 @@ interface MatchedEntity {
 }
 ```
 
-LITEKO populates all five fields where available; AVNT uses `name`, `caseNumber`, `status`.
+### `NormalizedCheckResult`
 
-`NormalizedCheckResult` (shared interface, already defined in `src/lib/types.ts`):
+Unchanged from existing definition. Reproduced here for clarity:
 
 ```typescript
 interface NormalizedCheckResult {
@@ -80,72 +92,95 @@ interface NormalizedCheckResult {
 }
 ```
 
+---
+
+## 3. LITEKO Provider
+
+**File:** `src/providers/liteko-court-cases/search.ts`
+
 ### Browser mode
 
-Playwright launches **non-headless** (`headless: false`) — a visible Chromium window appears on the operator's machine. The search form is pre-filled with borrower name (and `borrowerIdCode` if provided).
+Playwright launches **non-headless** (`headless: false`). The search form is pre-filled with borrower name (and `idCode` if provided).
 
 ### CAPTCHA handling
 
-After pre-filling the form:
-1. The provider calls `page.waitForNavigation({ timeout: 180_000 })` (3-minute timeout). Navigation away from the search page signals CAPTCHA solved and form submitted.
-2. On timeout, the browser closes and the provider returns `{ status: "error", summaryText: "CAPTCHA timeout — no response within 3 minutes", resultsCount: 0, matchedEntities: [], screenshotBuffer: null, ... }`.
-3. On success, the provider scrapes results, takes a full-page screenshot, then closes the browser.
+After pre-filling the form, the provider must register the navigation wait *before* triggering any action that could cause navigation (to avoid a race condition). Use `Promise.all`:
+
+```typescript
+const [response] = await Promise.all([
+  page.waitForURL((url) => !url.href.includes("/search"), { timeout: 180_000 }),
+  page.click("button[type=submit]"),  // or equivalent submit trigger
+]);
+```
+
+- On timeout (3 minutes): close browser, return `{ status: "error", summaryText: "CAPTCHA timeout — not solved within 3 minutes", resultsCount: 0, matchedEntities: [], screenshotBuffer: null, ... }`
+- On success: scrape results, take full-page screenshot, close browser
 
 ### Parsing
 
-Primary signal: extract count from the results page heading or pagination (e.g., "Rasta N bylų"). If count > 0 → `match_found`. If count = 0 → `no_match`. If the count element cannot be found → `ambiguous`.
+Primary signal: extract count from the results page heading (e.g., "Rasta N bylų"). If count > 0 → `match_found`. If count = 0 → `no_match`. If the count element cannot be found → `ambiguous`.
 
-`matchedEntities`: parse visible case rows into `{ name, caseNumber, status, date, court }` from the results table.
+`matchedEntities`: parse visible case rows into `{ name, caseNumber, status, date, court }`.
 
-`screenshotBuffer`: full-page PNG of the results page. `null` if navigation never occurred (error/timeout).
+`screenshotBuffer`: full-page PNG. `null` if no navigation occurred (error/timeout).
 
 ---
 
-## 3. API Changes
+## 4. API Changes
 
 **Endpoint:** `POST /api/checks/run`
+
+### Auth
+
+Unchanged from existing implementation — 401 if no valid session (handled by existing auth middleware at the start of the route handler).
 
 ### Full request body
 
 ```typescript
 {
-  providerKeys: ("avnt_insolvency" | "liteko_court_cases")[];  // CHANGED: was single providerKey
+  providerKeys: ("avnt_insolvency" | "liteko_court_cases")[];  // replaces single providerKey
   borrowerName: string;
-  idCode?: string;           // maps to borrowerIdCode in DB
+  idCode?: string;
   loanReference?: string;
   driveFolderUrl: string;
 }
 ```
 
 Validation:
-- `providerKeys` must be a non-empty array
-- Each key must be a known provider key
-- After feature-flag filtering (see below), array must still be non-empty — otherwise return `400 { error: "No enabled providers selected" }`
+- `providerKeys` must be a non-empty array of known keys
+- After feature-flag stripping, must still be non-empty — otherwise return `400 { error: "No enabled providers selected" }`
 
 ### Execution flow
 
 ```
-1. Generate runGroupId (uuid v4)
-2. For each providerKey in providerKeys — sequential, AVNT first if both present:
+1. Auth check (existing middleware — 401 if no session)
+2. Validate request body
+3. Strip disabled providers (ENABLE_LITEKO=false removes liteko_court_cases)
+4. Generate runGroupId (uuid v4)
+5. Generate PDF filename: {sanitized_borrower_name}_{date_YYYYMMDD}_evidence.pdf
+   where sanitized_borrower_name = borrowerName.replace(/[^a-zA-Z0-9]/g, "_")
+6. For each providerKey in providerKeys (sequential, AVNT first if both present):
    a. Run provider search → NormalizedCheckResult
    b. Write SearchRun row:
-        runGroupId, providerKey, borrowerName, borrowerIdCode (=idCode),
-        loanReference, driveFolderUrl, createdByEmail, resultStatus (=result.status),
-        resultsCount, matchedSummary (=result.summaryText),
-        requestPayloadJson, normalizedResultJson
-      (uploadedFileId / uploadedFileUrl / uploadedFileName filled in step 5)
-3. Collect all results[]
-4. Generate combined PDF from all results → Buffer  (on failure: set pdfError, skip upload, go to step 6)
-5. Upload PDF to driveFolderUrl → { fileId, webViewLink, fileName }  (on failure: set driveError, skip DB update)
-6. If upload succeeded: UPDATE all SearchRun rows WHERE runGroupId=? SET uploadedFileId, uploadedFileUrl, uploadedFileName
-7. Return response (always 200 unless request validation fails)
+        { runGroupId, providerKey, borrowerName, borrowerIdCode (=idCode),
+          loanReference, driveFolderUrl, createdByEmail (=session email),
+          resultStatus (=result.status), resultsCount, matchedSummary (=result.summaryText),
+          requestPayloadJson, normalizedResultJson }
+      (uploadedFileId / uploadedFileUrl / uploadedFileName left null at this point)
+7. Generate combined PDF from all results[] → Buffer
+   On failure: set pdfError, skip steps 8–9, go to step 10
+8. Upload PDF to Google Drive folder
+   On failure: set driveError, skip step 9
+9. UPDATE all SearchRun rows WHERE runGroupId = ? SET
+        uploadedFileId = fileId, uploadedFileUrl = webViewLink, uploadedFileName = fileName
+10. Return 200 response
 ```
 
-**Partial provider failure:** If one provider returns `status: "error"`, execution continues to the next provider. The error result is included in `results[]`. PDF generation proceeds with whatever screenshots are available (`screenshotBuffer: null` entries are skipped — no screenshot page added for that provider).
+**Partial provider failure:** If one provider returns `status: "error"`, continue to the next provider. Include the error result in `results[]`. PDF generation proceeds with available screenshots — providers with `screenshotBuffer: null` get no screenshot page.
 
-**PDF generation failure:** `pdfError` is set in the response. No upload is attempted. `SearchRun` rows are still written (with null `uploadedFileId`). Response is still 200.
+**PDF generation failure:** `pdfError` set in response. No upload attempted. All `SearchRun` rows still written (null `uploadedFileId`). Response 200.
 
-**Drive upload failure:** `driveError` is set in the response. `SearchRun` rows are still written (with null `uploadedFileId`). Response is still 200.
+**Drive upload failure:** `driveError` set in response. `SearchRun` rows still written (null `uploadedFileId`). Response 200.
 
 ### Response shape
 
@@ -158,83 +193,91 @@ Validation:
     resultsCount: number;
     summaryText: string;
   }[];
-  driveFileId: string | null;       // uploadedFileId
-  driveWebViewLink: string | null;  // uploadedFileUrl (for Drive "Open" link)
-  driveFileName: string | null;     // uploadedFileName (display name)
+  driveFileId: string | null;
+  driveWebViewLink: string | null;
+  driveFileName: string | null;
   driveError?: string;
   pdfError?: string;
 }
 ```
 
-### Feature flag — server side
+### Feature flag — API side
 
-`ENABLE_LITEKO` env var (`"true"` / `"false"`, default `"false"`). When `false`, `liteko_court_cases` is stripped from `providerKeys` before execution begins.
+`ENABLE_LITEKO` env var (`"true"` / `"false"`, default `"false"`). Strip `liteko_court_cases` from `providerKeys` before step 6 when `false`.
 
 ### Feature flag — frontend config endpoint
 
-`GET /api/config` — unauthenticated, returns feature flags for the UI:
+`GET /api/config` — **no auth required** (public feature flag, no sensitive data):
 
 ```typescript
 // Response:
 { enableLiteko: boolean }
 ```
 
-The CheckForm client component fetches this on mount to determine whether to render the LITEKO checkbox.
-
 ### HTTP timeout
 
-LITEKO has a 3-minute CAPTCHA timeout at the provider level. A two-provider run may take up to ~3.5 minutes. The Next.js route handler has no built-in timeout. If deployed behind a reverse proxy (e.g., nginx), `proxy_read_timeout` must be set to at least `300s`. Document this requirement in `.env.example` comments.
+A two-provider run may take up to ~3.5 minutes (3-min CAPTCHA wait + ~20s AVNT + overhead). Next.js route handlers have no built-in timeout. When deployed behind a reverse proxy (e.g., nginx), set `proxy_read_timeout 300;`. Document in `.env.example`.
 
 ---
 
-## 4. Combined Evidence PDF
+## 5. Combined Evidence PDF
 
-**File:** `src/services/evidence.ts` — signature updated to accept multiple results.
+**File:** `src/services/evidence.ts`
 
-### New signature
+### Breaking signature change
+
+The existing signature `generateEvidencePdf(input, result, filename)` (single result) is replaced by:
 
 ```typescript
 export async function generateEvidencePdf(
   input: RunCheckInput,
-  results: NormalizedCheckResult[],  // ordered AVNT first
+  results: NormalizedCheckResult[],  // array, ordered AVNT first
   filename: string
 ): Promise<Buffer>
 ```
+
+**All existing call sites in `src/app/api/checks/run/route.ts` must be updated** to pass `results` as an array.
 
 ### Page structure
 
 | Scenario | Pages |
 |----------|-------|
-| AVNT only | Page 1: summary · Page 2: AVNT screenshot (if available) |
-| LITEKO only | Page 1: summary · Page 2: LITEKO screenshot (if available) |
-| Both | Page 1: summary · Page 2: AVNT screenshot (if available) · Page 3: LITEKO screenshot (if available) |
+| AVNT only | Page 1: summary · Page 2: AVNT screenshot (if buffer present) |
+| LITEKO only | Page 1: summary · Page 2: LITEKO screenshot (if buffer present) |
+| Both | Page 1: summary · Page 2: AVNT screenshot · Page 3: LITEKO screenshot |
 
-Screenshot pages are only added when `result.screenshotBuffer !== null`.
+Screenshot pages only added when `result.screenshotBuffer !== null`.
 
 ### Page 1 — Summary
 
 - Header bar (brand blue): "Public Registry Check — Evidence Report"
-- **Run Information**: initiated by (`createdByEmail`), timestamp, checks run (comma-separated provider labels), request ID (`runGroupId`)
+- **Run Information**: initiated by, timestamp, checks run (comma-separated provider labels), request ID (`runGroupId` — note: displayed on PDF as "Request ID" for audit trail, maps to `runGroupId` in DB)
 - **Search Input**: borrower name, ID code (or "not provided"), loan reference (or "not provided")
-- **Results Summary**: one result block per provider
-  - `no_match`: green border/background, "NO RECORD FOUND" badge
-  - `match_found`: red border/background, "N RECORDS FOUND" badge
-  - `error`: grey border, "TECHNICAL ERROR" badge
-  - Each block includes the summary text and, where applicable, "See screenshot on page N"
+- **Results Summary**: one result block per provider, with colour treatment:
+
+| Status | Border/background | Badge text |
+|---|---|---|
+| `no_match` | Green | NO RECORD FOUND |
+| `match_found` | Red | N RECORDS FOUND |
+| `ambiguous` | Amber | AMBIGUOUS — MANUAL REVIEW REQUIRED |
+| `error` | Grey | TECHNICAL ERROR |
+
+Each block includes summary text and, where applicable, "See screenshot on page N".
+
 - Footer: generated timestamp + "CONFIDENTIAL — INTERNAL USE ONLY"
 
-All user-supplied text passed through existing `sanitizeForPdf()` (Lithuanian transliteration).
+All user-supplied text passed through existing `sanitizeForPdf()` (Lithuanian character transliteration).
 
 ### Pages 2+ — Screenshot pages
 
 One page per provider where `screenshotBuffer !== null`:
-- Header bar (brand blue): `{ProviderLabel} — Search Results`
+- Brand-blue header bar: `{ProviderLabel} — Search Results`
 - Source URL line
 - Full-page screenshot scaled to fit A4 content area
 
 ---
 
-## 5. Frontend Changes
+## 6. Frontend Changes
 
 ### CheckForm
 
@@ -246,64 +289,70 @@ Replace the registry `<select>` with two checkboxes:
 ```
 
 - Both checked by default
-- Client-side validation: at least one checkbox must be checked before submit
-- On mount, fetch `GET /api/config`. If `enableLiteko: false`, hide the LITEKO checkbox entirely (do not render it)
-- Form submits `providerKeys: string[]` (replacing the previous `providerKey` string field)
+- Client-side validation: at least one checkbox must be checked
+- On mount, fetch `GET /api/config`. If `enableLiteko: false`, do not render the LITEKO checkbox
+- Form submits `providerKeys: string[]` (replaces previous single `providerKey`)
 
-### CAPTCHA wait state
+### Loading / CAPTCHA wait state
 
-The form submit sends a single `fetch` to `POST /api/checks/run` and awaits the response (which may take up to ~3.5 minutes). While awaiting:
+The form submit issues a single `fetch POST /api/checks/run` and awaits the full response. While awaiting:
 
-- A loading state is shown: **"Running checks… If LITEKO was selected, a browser window has opened on this machine — solve the CAPTCHA to continue."**
-- No streaming or polling is used — the client simply waits for the single HTTP response
-
-This is only shown when LITEKO is in the selected providers.
+- If `providerKeys` sent in the request includes `"liteko_court_cases"`:
+  Show: **"Running checks… A browser window has opened on this machine — solve the CAPTCHA to continue."** with a spinner
+- Otherwise:
+  Show: **"Running check…"** with a spinner
 
 ### Result display
 
 On success, replace the form with:
-1. One `ResultCard` per provider (in order: AVNT first)
+1. One `ResultCard` per provider (AVNT first)
    - Provider name, status badge, results count, summary text
-   - "View PDF in Drive →" link (using `driveWebViewLink`)
-2. A **Combined Evidence PDF** tile below the cards: filename (`driveFileName`) + Drive link
-3. On `driveError`: show error message instead of Drive links
+   - "View PDF in Drive →" link using `driveWebViewLink`
+2. A **Combined Evidence PDF** tile: `driveFileName` + Drive link
+3. If `driveError`: show error message in place of Drive links
 
 ### History table
 
-The history API (`GET /api/checks/history`) query logic:
+Query to build the grouped history view:
 
 ```sql
-SELECT DISTINCT runGroupId FROM SearchRun ORDER BY createdAt DESC
--- For each runGroupId, fetch all rows in that group
+SELECT runGroupId, MIN(createdAt) AS groupCreatedAt
+FROM SearchRun
+GROUP BY runGroupId
+ORDER BY groupCreatedAt DESC
 ```
 
-Display one table row per `runGroupId`:
-- Borrower name (same across all rows in group — use first row's value)
-- Date (first row's `createdAt`)
-- Per-provider status chips, one per row in group (ordered AVNT first)
-- PDF link from `uploadedFileUrl` (same across rows in group — use first non-null value)
+For each `runGroupId`, fetch all rows in that group to get per-provider status chips.
+
+**Legacy rows** (`runGroupId = ""`): treat each legacy row as its own single-provider group — query `WHERE runGroupId = "" ORDER BY createdAt DESC` and display individually, not collapsed together.
+
+Display per group row:
+- Borrower name (first row in group)
+- Date (`groupCreatedAt`)
+- Per-provider status chips (one per row in group, ordered AVNT first)
+- PDF link from first non-null `uploadedFileUrl` in group
 
 ---
 
-## 6. Feature Flag
+## 7. Feature Flag
 
 ### `ENABLE_LITEKO` env var
 
-- `"false"` (default): LITEKO checkbox hidden on the form; API strips `liteko_court_cases` from any request
+- `"false"` (default): LITEKO checkbox not rendered; API strips `liteko_court_cases` from any request
 - `"true"`: LITEKO fully enabled; a visible browser window appears on the server machine when LITEKO runs
 
 Add to `.env.example`:
 
 ```
-# Set to true to enable LITEKO court case search
-# Note: requires a visible display — not suitable for headless server deployment
-# Reverse proxy read timeout must be >= 300s when LITEKO is enabled
+# Set to true to enable LITEKO court case search.
+# Requires a visible display (headless: false) — do not enable on headless servers.
+# When enabled, set reverse proxy read timeout >= 300s.
 ENABLE_LITEKO=false
 ```
 
 ### Versioning
 
-Before any LITEKO code is written, tag the current working AVNT-only commit as `v1.0`. This provides a clean rollback point.
+Tag the current working AVNT-only commit as `v1.0` before writing any LITEKO code. This provides a clean rollback point: `git checkout v1.0`.
 
 ---
 
