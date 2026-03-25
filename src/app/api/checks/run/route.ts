@@ -5,7 +5,7 @@ import { getProvider } from "@/providers/registry";
 import { generateEvidencePdf } from "@/services/evidence";
 import { extractFolderIdFromUrl, uploadFileToDrive } from "@/services/drive";
 import { db } from "@/lib/db";
-import type { RunCheckInput } from "@/lib/types";
+import type { RunCheckInput, NormalizedCheckResult } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -55,31 +55,57 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const result = await provider.runSearch(input);
+    let result: NormalizedCheckResult;
+    try {
+      result = await provider.runSearch(input);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result = {
+        providerKey,
+        sourceUrl: "",
+        searchedAt: new Date().toISOString(),
+        borrowerNameInput: input.borrowerName,
+        status: "error",
+        resultsCount: 0,
+        matchedEntities: [],
+        summaryText: `Search failed: ${message}`,
+      };
+    }
 
-    const filename = `${providerKey}_${input.borrowerName.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
-    const pdfBuffer = await generateEvidencePdf(input, result, filename);
+    const safeName = input.borrowerName
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_\-.]/g, "_");
+    const filename = `${providerKey}_${safeName}_${Date.now()}.pdf`;
+
+    let pdfBuffer: Buffer | undefined;
+    try {
+      pdfBuffer = await generateEvidencePdf(input, result, filename);
+    } catch {
+      // PDF generation failed — continue without PDF
+    }
 
     let uploadedFileId: string | undefined;
     let uploadedFileUrl: string | undefined;
     let driveError: string | undefined;
 
-    try {
-      const uploaded = await uploadFileToDrive(
-        session.accessToken,
-        folderId,
-        filename,
-        pdfBuffer
-      );
-      uploadedFileId = uploaded.fileId;
-      uploadedFileUrl = uploaded.webViewLink;
-    } catch (err) {
-      driveError = err instanceof Error ? err.message : String(err);
+    if (pdfBuffer) {
+      try {
+        const uploaded = await uploadFileToDrive(
+          session.accessToken,
+          folderId,
+          filename,
+          pdfBuffer
+        );
+        uploadedFileId = uploaded.fileId;
+        uploadedFileUrl = uploaded.webViewLink;
+      } catch (err) {
+        driveError = err instanceof Error ? err.message : String(err);
+      }
     }
 
     const run = await db.searchRun.create({
       data: {
-        createdByEmail: session.user.email,
+        createdByEmail: session.user.email!,
         borrowerName: input.borrowerName,
         borrowerIdCode: input.idCode,
         loanReference: input.loanReference,
@@ -91,7 +117,6 @@ export async function POST(req: NextRequest) {
         uploadedFileId,
         uploadedFileUrl,
         requestPayloadJson: JSON.stringify(input),
-        // Omit screenshotBuffer (binary) from the stored JSON
         normalizedResultJson: JSON.stringify({
           ...result,
           screenshotBuffer: undefined,

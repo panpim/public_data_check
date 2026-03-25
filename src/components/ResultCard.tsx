@@ -65,9 +65,19 @@ export function ResultCard({
         </a>
       )}
       {driveError && (
-        <p className="text-sm text-destructive">
-          Drive upload failed: {driveError}
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-destructive">
+            Drive upload failed: {driveError}
+          </p>
+          {(driveError.includes("401") ||
+            driveError.toLowerCase().includes("invalid_grant") ||
+            driveError.toLowerCase().includes("invalid credentials") ||
+            driveError.toLowerCase().includes("unauthenticated")) && (
+            <p className="text-sm text-muted-foreground">
+              Your Google session may have expired. Please sign out and sign back in to refresh your credentials.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
