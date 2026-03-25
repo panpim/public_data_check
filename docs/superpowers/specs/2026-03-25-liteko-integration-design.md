@@ -44,53 +44,82 @@ The API stores: `fileId` → `uploadedFileId`, `webViewLink` → `uploadedFileUr
 
 ---
 
-## 2. Types
+## 2. Type Changes
 
-Defined in `src/lib/types.ts`. No new files needed.
+All changes to `src/lib/types.ts`. These are **breaking changes** that must be applied in a single migration task before any provider or route code is touched.
 
-### `RunCheckInput`
+### `CheckProviderKey` — expand union
 
 ```typescript
-interface RunCheckInput {
-  providerKeys: string[];
+// Before:
+export type CheckProviderKey = "avnt_insolvency";
+
+// After:
+export type CheckProviderKey = "avnt_insolvency" | "liteko_court_cases";
+```
+
+Note: `src/providers/registry.ts` is typed `Record<CheckProviderKey, PublicCheckProvider>`. After this change it will be a TypeScript error until the LITEKO provider is registered. The type change and provider registration must happen in the same commit.
+
+### `RunCheckInput` — replace `providerKey` with `providerKeys`
+
+```typescript
+// Before:
+export interface RunCheckInput {
   borrowerName: string;
   idCode?: string;
   loanReference?: string;
   driveFolderUrl: string;
-  initiatedByEmail: string;  // = session user email
+  initiatedByEmail: string;
+  providerKey: CheckProviderKey;         // singular
+}
+
+// After:
+export interface RunCheckInput {
+  borrowerName: string;
+  idCode?: string;
+  loanReference?: string;
+  driveFolderUrl: string;
+  initiatedByEmail: string;
+  providerKeys: CheckProviderKey[];      // plural array
+  runGroupId: string;                    // NEW — propagated from API for audit trail
 }
 ```
 
-### `MatchedEntity`
+All consumers that currently read `input.providerKey` must be updated to use `input.providerKeys` (route.ts) or `input.runGroupId` (evidence.ts). The `route.ts` error-result construction that references `input.providerKey` must be updated accordingly.
 
-Shared between AVNT and LITEKO. AVNT uses `name`, `caseNumber`, `status`. LITEKO uses all five fields.
+### `MatchedEntity` — add LITEKO fields
 
 ```typescript
-interface MatchedEntity {
+// Before:
+export interface MatchedEntity {
   name: string;
   caseNumber?: string;
   status?: string;
-  date?: string;
-  court?: string;
+}
+
+// After:
+export interface MatchedEntity {
+  name: string;
+  caseNumber?: string;
+  status?: string;
+  date?: string;    // NEW — used by LITEKO
+  court?: string;   // NEW — used by LITEKO
 }
 ```
 
-### `NormalizedCheckResult`
-
-Unchanged from existing definition. Reproduced here for clarity:
+### `NormalizedCheckResult` — fix `screenshotBuffer` nullability
 
 ```typescript
-interface NormalizedCheckResult {
-  providerKey: string;
-  status: "no_match" | "match_found" | "ambiguous" | "error";
-  resultsCount: number;
-  summaryText: string;
-  matchedEntities: MatchedEntity[];
-  screenshotBuffer: Buffer | null;
-  sourceUrl: string;
-  searchedAt: string; // ISO 8601
-}
+// Before:
+screenshotBuffer?: Buffer;       // optional (may be undefined)
+
+// After:
+screenshotBuffer: Buffer | null; // required, explicitly nullable
 ```
+
+This is a breaking change for the AVNT provider (`src/providers/avnt-insolvency/search.ts`) — it must return `screenshotBuffer: null` (not omit the field) in error paths. The `evidence.ts` guard `if (result.screenshotBuffer)` already handles both `null` and `undefined` safely.
+
+All five fields from the existing definition (`providerKey`, `sourceUrl`, `searchedAt`, `borrowerNameInput`, `idCodeInput`, `status`, `resultsCount`, `matchedEntities`, `summaryText`, `screenshotBuffer`) are preserved — only `screenshotBuffer`'s type changes.
 
 ---
 
@@ -242,13 +271,15 @@ The existing signature `generateEvidencePdf(input, result, filename)` (single re
 
 ```typescript
 export async function generateEvidencePdf(
-  input: RunCheckInput,
+  input: RunCheckInput,              // carries runGroupId for PDF audit trail
   results: NormalizedCheckResult[],  // array, ordered AVNT first
   filename: string
 ): Promise<Buffer>
 ```
 
 **All existing call sites in `src/app/api/checks/run/route.ts` must be updated** to pass `results` as an array.
+
+`input.runGroupId` is printed as "Request ID" on the PDF summary page, replacing the internal `uuidv4()` call currently in `evidence.ts`. This ensures the PDF's "Request ID" matches the `runGroupId` stored on every `SearchRun` row in the group.
 
 ### Page structure
 
