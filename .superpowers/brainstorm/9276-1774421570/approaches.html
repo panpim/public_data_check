@@ -1,0 +1,42 @@
+<h2>Architecture Approach</h2>
+<p class="subtitle">Three ways to wire the Next.js app together</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A ★</div>
+    <div class="content">
+      <h3>App Router + API Route</h3>
+      <p>Next.js App Router (server components where possible), one dedicated <code>POST /api/checks/run</code> route that runs Playwright + pdf-lib + Drive upload as a single async job. Auth via NextAuth route handler. <strong>Recommended</strong> — matches the architecture doc exactly, modern, clean separation.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Matches spec exactly</li><li>Easy to add more providers later</li><li>Server components keep secrets server-side</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Long-running route (~30s) — needs a non-serverless host</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>App Router + Server Actions</h3>
+      <p>Replace <code>/api/checks/run</code> with a Next.js Server Action called directly from the form. No explicit API route. Slightly simpler form wiring.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Less boilerplate</li><li>Direct form → server function</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Harder to call from external scripts</li><li>Less standard for long-running tasks</li><li>Deviates from the spec</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Pages Router + API Route</h3>
+      <p>Use the older Next.js Pages Router (<code>pages/</code> directory). Everything works the same under the hood.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>More familiar if team knows older Next.js</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>No server components</li><li>Less modern pattern</li><li>No benefit over A</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

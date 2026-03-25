@@ -1,0 +1,92 @@
+<h2>Design — Section 1: Architecture & Project Structure</h2>
+<p class="subtitle">Full file tree and data flow for the Public Registry Check Tool</p>
+
+<div class="section">
+  <h3>File Structure</h3>
+  <div style="background:#0f172a;border-radius:8px;padding:18px;font-family:monospace;font-size:12px;color:#e2e8f0;line-height:1.7;">
+    <span style="color:#94a3b8;">panpim/</span><br>
+    ├── <span style="color:#7dd3fc;">prisma/</span><br>
+    │&nbsp;&nbsp; └── schema.prisma &nbsp;<span style="color:#64748b;">← SQLite + SearchRun model</span><br>
+    ├── <span style="color:#7dd3fc;">src/</span><br>
+    │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">app/</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── layout.tsx &nbsp;<span style="color:#64748b;">← SessionProvider, fonts</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── page.tsx &nbsp;<span style="color:#64748b;">← redirect → /check</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">check/page.tsx</span> &nbsp;<span style="color:#64748b;">← CheckForm (protected)</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">history/page.tsx</span> &nbsp;<span style="color:#64748b;">← Audit log table (protected)</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#7dd3fc;">api/</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── auth/[...nextauth]/route.ts<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── checks/run/route.ts &nbsp;<span style="color:#64748b;">← POST handler</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; └── history/route.ts &nbsp;<span style="color:#64748b;">← GET audit rows</span><br>
+    │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">components/</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── CheckForm.tsx<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── ResultCard.tsx<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── HistoryTable.tsx<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── Nav.tsx<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#7dd3fc;">ui/</span> &nbsp;<span style="color:#64748b;">← shadcn components</span><br>
+    │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">providers/</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── avnt-insolvency/index.ts + search.ts<br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; └── registry.ts<br>
+    │&nbsp;&nbsp; ├── <span style="color:#7dd3fc;">services/</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── evidence.ts &nbsp;<span style="color:#64748b;">← pdf-lib PDF generator</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; └── drive.ts &nbsp;<span style="color:#64748b;">← googleapis upload</span><br>
+    │&nbsp;&nbsp; └── <span style="color:#7dd3fc;">lib/</span><br>
+    │&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ├── auth.ts &nbsp;<span style="color:#64748b;">← NextAuth config</span><br>
+    │&nbsp;&nbsp; │&nbsp;&nbsp; ├── db.ts &nbsp;<span style="color:#64748b;">← Prisma client singleton</span><br>
+    │&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; └── types.ts &nbsp;<span style="color:#64748b;">← shared TypeScript types</span><br>
+    ├── data/ &nbsp;<span style="color:#64748b;">← checks.db lives here</span><br>
+    ├── .env.example<br>
+    └── package.json<br>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Request Flow</h3>
+  <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;font-family:system-ui;font-size:12px;">
+    <div style="background:#1e40af;color:#fff;padding:8px 14px;border-radius:6px;text-align:center;">User fills<br>CheckForm</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#1e3a5f;color:#93c5fd;padding:8px 14px;border-radius:6px;text-align:center;border:1px solid #2563eb;">POST<br>/api/checks/run</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#14532d;color:#86efac;padding:8px 14px;border-radius:6px;text-align:center;">Playwright<br>AVNT search</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#3b0764;color:#d8b4fe;padding:8px 14px;border-radius:6px;text-align:center;">pdf-lib<br>evidence PDF</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#431407;color:#fdba74;padding:8px 14px;border-radius:6px;text-align:center;">Drive<br>upload</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#1c1917;color:#d6d3d1;padding:8px 14px;border-radius:6px;text-align:center;">Prisma<br>audit row</div>
+    <div style="color:#94a3b8;padding:0 8px;font-size:18px;">→</div>
+    <div style="background:#1e40af;color:#fff;padding:8px 14px;border-radius:6px;text-align:center;">Result<br>returned</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Pages</h3>
+  <table style="width:100%;border-collapse:collapse;font-family:system-ui;font-size:13px;">
+    <tr style="background:#1e293b;color:#94a3b8;">
+      <th style="padding:8px 12px;text-align:left;">Route</th>
+      <th style="padding:8px 12px;text-align:left;">Purpose</th>
+      <th style="padding:8px 12px;text-align:left;">Auth required</th>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;">
+      <td style="padding:8px 12px;font-family:monospace;">/</td>
+      <td style="padding:8px 12px;">Redirect to /check</td>
+      <td style="padding:8px 12px;">No</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;background:#0f172a;">
+      <td style="padding:8px 12px;font-family:monospace;">/check</td>
+      <td style="padding:8px 12px;">Run a compliance check</td>
+      <td style="padding:8px 12px;">Yes</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;">
+      <td style="padding:8px 12px;font-family:monospace;">/history</td>
+      <td style="padding:8px 12px;">Audit log of all past runs</td>
+      <td style="padding:8px 12px;">Yes</td>
+    </tr>
+    <tr style="background:#0f172a;">
+      <td style="padding:8px 12px;font-family:monospace;">/api/auth/*</td>
+      <td style="padding:8px 12px;">NextAuth Google OAuth</td>
+      <td style="padding:8px 12px;">—</td>
+    </tr>
+  </table>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does this structure look right? Let me know in the terminal.</p>

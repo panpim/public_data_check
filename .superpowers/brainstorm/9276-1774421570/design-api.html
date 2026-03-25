@@ -1,0 +1,86 @@
+<h2>Design — Section 3: API Route & Services</h2>
+<p class="subtitle">POST /api/checks/run orchestrates the full pipeline in one request</p>
+
+<div class="section">
+  <h3>POST /api/checks/run — step by step</h3>
+  <div style="font-family:system-ui;font-size:13px;">
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">1</div>
+      <div><strong>Auth check</strong> — reject if no session (401)</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">2</div>
+      <div><strong>Validate input</strong> — borrowerName required, driveFolderUrl must be a valid Drive URL</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#1e40af;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">3</div>
+      <div><strong>Look up provider</strong> — resolve <code>providerKey</code> → <code>PublicCheckProvider</code> from registry (throws 400 if unknown)</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#14532d;color:#86efac;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">4</div>
+      <div><strong>Run search</strong> — <code>provider.runSearch(input)</code> → <code>NormalizedCheckResult</code> (Playwright, ~10–25s)</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#3b0764;color:#d8b4fe;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">5</div>
+      <div><strong>Generate PDF</strong> — <code>generateEvidencePdf(input, result, filename)</code> → <code>Buffer</code></div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#431407;color:#fdba74;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">6</div>
+      <div><strong>Upload to Drive</strong> — extract folder ID from URL, upload PDF with user's OAuth token → get file ID + URL</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;">
+      <div style="background:#1c1917;color:#d6d3d1;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">7</div>
+      <div><strong>Write audit row</strong> — <code>prisma.searchRun.create(…)</code> — always written even on partial failure</div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      <div style="background:#0f766e;color:#99f6e4;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;">8</div>
+      <div><strong>Return JSON</strong> — <code>{ status, resultsCount, summaryText, driveUrl, runId }</code></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Drive service — drive.ts</h3>
+  <div style="background:#0f172a;border-radius:8px;padding:14px;font-family:monospace;font-size:12px;color:#e2e8f0;line-height:1.7;">
+    <span style="color:#64748b;">// Uses the user's Google OAuth access token from NextAuth session</span><br>
+    <span style="color:#64748b;">// scope: drive.file — can only touch files created by this app</span><br><br>
+    <span style="color:#7dd3fc;">uploadFileToDrive</span>(<br>
+    &nbsp;&nbsp;accessToken: string,<br>
+    &nbsp;&nbsp;folderId: string, &nbsp;&nbsp;&nbsp;<span style="color:#64748b;">// extracted from Drive URL</span><br>
+    &nbsp;&nbsp;filename: string,<br>
+    &nbsp;&nbsp;pdfBuffer: Buffer<br>
+    ) → <span style="color:#fbbf24;">{ fileId, webViewLink }</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Error handling</h3>
+  <table style="width:100%;border-collapse:collapse;font-family:system-ui;font-size:13px;">
+    <tr style="background:#1e293b;color:#94a3b8;">
+      <th style="padding:8px 12px;text-align:left;">Failure point</th>
+      <th style="padding:8px 12px;text-align:left;">Behaviour</th>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;">
+      <td style="padding:8px 12px;">Playwright search fails</td>
+      <td style="padding:8px 12px;">Result status = <code>error</code>, audit row written, PDF still generated with error page</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;background:#0f172a;">
+      <td style="padding:8px 12px;">Drive upload fails</td>
+      <td style="padding:8px 12px;">Audit row written with no fileId, result still returned to UI with a warning</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px;">Drive token expired</td>
+      <td style="padding:8px 12px;">NextAuth refreshes automatically via <code>account.refresh_token</code> — 401 returned if refresh fails</td>
+    </tr>
+  </table>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does the API + services design look right?</p>

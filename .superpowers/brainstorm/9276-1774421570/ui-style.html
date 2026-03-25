@@ -1,0 +1,54 @@
+<h2>UI Component Library</h2>
+<p class="subtitle">Which styling approach for the check form and dashboard?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f172a;padding:16px;border-radius:6px 6px 0 0;">
+      <div style="background:#1e293b;border-radius:6px;padding:14px;font-family:system-ui;">
+        <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px;">BORROWER NAME</div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:4px;padding:7px 10px;color:#e2e8f0;font-size:12px;">UAB Example Company</div>
+        <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:1px;margin:10px 0 6px;">REGISTRY</div>
+        <div style="background:#0f172a;border:1px solid #334155;border-radius:4px;padding:7px 10px;color:#e2e8f0;font-size:12px;">AVNT Insolvency Register ▾</div>
+        <div style="margin-top:12px;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;padding:8px 14px;border-radius:4px;display:inline-block;">Run Check</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — shadcn/ui + Tailwind</h3>
+      <p>Headless components, fully customisable, dark-mode ready, minimal bundle. Most popular for new Next.js projects in 2024–25.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f8fafc;padding:16px;border-radius:6px 6px 0 0;border-bottom:1px solid #e2e8f0;">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;font-family:system-ui;box-shadow:0 1px 3px rgba(0,0,0,0.07);">
+        <div style="color:#6b7280;font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px;">BORROWER NAME</div>
+        <div style="background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;color:#111827;font-size:12px;">UAB Example Company</div>
+        <div style="color:#6b7280;font-size:10px;font-weight:600;letter-spacing:1px;margin:10px 0 6px;">REGISTRY</div>
+        <div style="background:#f9fafb;border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;color:#111827;font-size:12px;">AVNT Insolvency Register ▾</div>
+        <div style="margin-top:12px;background:#1d4ed8;color:#fff;font-size:11px;font-weight:600;padding:8px 14px;border-radius:6px;display:inline-block;">Run Check</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Tailwind CSS only</h3>
+      <p>Raw utility classes, no component library. Maximum control, slightly more manual work styling inputs, modals, and tables.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f0f4ff;padding:16px;border-radius:6px 6px 0 0;border-bottom:1px solid #c7d2fe;">
+      <div style="background:#ffffff;border-radius:8px;padding:14px;font-family:system-ui;box-shadow:0 2px 8px rgba(99,102,241,0.12);">
+        <div style="color:#6366f1;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:6px;">Borrower Name</div>
+        <div style="background:#f5f3ff;border:2px solid #a5b4fc;border-radius:6px;padding:7px 10px;color:#3730a3;font-size:12px;">UAB Example Company</div>
+        <div style="color:#6366f1;font-size:10px;font-weight:700;letter-spacing:1px;margin:10px 0 6px;">Registry</div>
+        <div style="background:#f5f3ff;border:2px solid #a5b4fc;border-radius:6px;padding:7px 10px;color:#3730a3;font-size:12px;">AVNT Insolvency Register ▾</div>
+        <div style="margin-top:12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:600;padding:8px 14px;border-radius:6px;display:inline-block;">Run Check</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Chakra UI</h3>
+      <p>Rich accessible component set, built-in theming, accessible by default. Heavier bundle than shadcn but faster to build with.</p>
+    </div>
+  </div>
+
+</div>

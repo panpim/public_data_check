@@ -1,0 +1,64 @@
+<h2>Design — Section 2: Database Schema</h2>
+<p class="subtitle">Prisma model for SQLite. One table — SearchRun — is the authoritative audit log.</p>
+
+<div class="section">
+  <div style="background:#0f172a;border-radius:8px;padding:18px;font-family:monospace;font-size:12px;color:#e2e8f0;line-height:1.8;">
+    <span style="color:#64748b;">// prisma/schema.prisma</span><br><br>
+    <span style="color:#7dd3fc;">datasource</span> db {<br>
+    &nbsp;&nbsp;provider = <span style="color:#86efac;">"sqlite"</span><br>
+    &nbsp;&nbsp;url &nbsp;&nbsp;&nbsp;&nbsp; = env(<span style="color:#86efac;">"DATABASE_URL"</span>)<br>
+    }<br><br>
+    <span style="color:#7dd3fc;">generator</span> client {<br>
+    &nbsp;&nbsp;provider = <span style="color:#86efac;">"prisma-client-js"</span><br>
+    }<br><br>
+    <span style="color:#7dd3fc;">model</span> <span style="color:#fbbf24;">SearchRun</span> {<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">id</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; String &nbsp;<span style="color:#7dd3fc;">@id @default(cuid())</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">createdAt</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DateTime <span style="color:#7dd3fc;">@default(now())</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">createdByEmail</span> &nbsp;&nbsp;&nbsp;&nbsp; String &nbsp;<span style="color:#64748b;">// Google account email</span><br><br>
+    &nbsp;&nbsp;<span style="color:#64748b;">// — Search input —</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">borrowerName</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; String<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">borrowerIdCode</span> &nbsp;&nbsp;&nbsp;&nbsp; String?<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">loanReference</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; String?<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">providerKey</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; String &nbsp;<span style="color:#64748b;">// "avnt_insolvency"</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">driveFolderUrl</span> &nbsp;&nbsp;&nbsp;&nbsp; String<br><br>
+    &nbsp;&nbsp;<span style="color:#64748b;">// — Normalised result —</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">resultStatus</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; String &nbsp;<span style="color:#64748b;">// no_match | match_found | ambiguous | error</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">resultsCount</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Int<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">matchedSummary</span> &nbsp;&nbsp;&nbsp;&nbsp; String?<br><br>
+    &nbsp;&nbsp;<span style="color:#64748b;">// — Drive evidence —</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">uploadedFileId</span> &nbsp;&nbsp;&nbsp;&nbsp; String?<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">uploadedFileUrl</span> &nbsp;&nbsp;&nbsp;&nbsp;String?<br><br>
+    &nbsp;&nbsp;<span style="color:#64748b;">// — Raw payloads for reprocessing —</span><br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">requestPayloadJson</span> &nbsp; String?<br>
+    &nbsp;&nbsp;<span style="color:#c4b5fd;">normalizedResultJson</span> String?<br>
+    }<br>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key decisions</h3>
+  <table style="width:100%;border-collapse:collapse;font-family:system-ui;font-size:13px;">
+    <tr style="background:#1e293b;color:#94a3b8;">
+      <th style="padding:8px 12px;text-align:left;">Decision</th>
+      <th style="padding:8px 12px;text-align:left;">Rationale</th>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;">
+      <td style="padding:8px 12px;font-family:monospace;">@id @default(cuid())</td>
+      <td style="padding:8px 12px;">Collision-safe, URL-safe string IDs — no integer sequences to expose</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;background:#0f172a;">
+      <td style="padding:8px 12px;font-family:monospace;">resultStatus String</td>
+      <td style="padding:8px 12px;">SQLite has no enum type — stored as string, validated in app layer</td>
+    </tr>
+    <tr style="border-bottom:1px solid #1e293b;">
+      <td style="padding:8px 12px;font-family:monospace;">requestPayloadJson</td>
+      <td style="padding:8px 12px;">Full snapshot enables re-running or re-generating the PDF without re-searching</td>
+    </tr>
+    <tr style="background:#0f172a;">
+      <td style="padding:8px 12px;">No Account/Session tables</td>
+      <td style="padding:8px 12px;">NextAuth is configured for JWT sessions — no DB adapter needed, keeping the schema minimal</td>
+    </tr>
+  </table>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does the schema look right? Let me know in the terminal.</p>
