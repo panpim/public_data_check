@@ -929,6 +929,16 @@ git commit -m "feat: rewrite evidence PDF to support multiple providers and use 
 
 The route is a full rewrite. The new shape: accept `providerKeys[]`, run LITEKO first if both present, write one `SearchRun` row per provider sharing `runGroupId`, generate combined PDF, upload, update all rows.
 
+**Prerequisite: Tasks 1–4 must be fully committed before starting this task.**
+
+- [ ] **Step 0: Verify prerequisite state**
+
+```bash
+npx tsc --noEmit
+```
+
+Expected: no errors. If errors reference `RunCheckInput.providerKeys`, `runGroupId`, or `screenshotBuffer`, Tasks 1–4 have not been applied — stop and complete those first.
+
 - [ ] **Step 1: Update the tests first**
 
 Replace `tests/api/checks-run.test.ts`:
