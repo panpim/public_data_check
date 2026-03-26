@@ -56,7 +56,13 @@ export async function navigateToCompanyProfile(
   await page.keyboard.press("Enter");
   await page.waitForLoadState("networkidle", { timeout: NAV_TIMEOUT }).catch(() => {});
 
-  // Collect links to company profiles
+  // If the site redirected directly to a company profile page, we're done.
+  const currentUrl = page.url();
+  if (isCompanyProfileUrl(currentUrl)) {
+    return;
+  }
+
+  // Otherwise we're on a results page — collect links to company profiles.
   const companyLinkSelectors = [
     'a[href*="/imone/"]',
     'a[href*="/en/company/"]',
@@ -72,8 +78,13 @@ export async function navigateToCompanyProfile(
       const elements = await page.locator(sel).all();
       if (elements.length > 0) {
         const hrefs = await Promise.all(elements.map((el) => el.getAttribute("href")));
-        profileLinks = hrefs.filter(Boolean) as string[];
-        break;
+        const companyHrefs = (hrefs.filter(Boolean) as string[]).filter(
+          (h) => isCompanyProfileUrl(h) || h.includes("/imone/") || h.includes("/en/company/")
+        );
+        if (companyHrefs.length > 0) {
+          profileLinks = companyHrefs;
+          break;
+        }
       }
     } catch {
       // try next selector
@@ -100,4 +111,8 @@ export async function navigateToCompanyProfile(
     : `https://rekvizitai.vz.lt${href}`;
 
   await page.goto(url, { waitUntil: "networkidle" });
+}
+
+function isCompanyProfileUrl(url: string): boolean {
+  return /rekvizitai\.vz\.lt\/(en\/company|imone)\//.test(url);
 }
