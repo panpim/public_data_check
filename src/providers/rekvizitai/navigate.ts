@@ -33,31 +33,37 @@ export async function navigateToCompanyProfile(
     'input[class*="search" i]',
   ];
 
-  let inputFilled = false;
+  let filledSelector: string | null = null;
   for (const sel of searchInputSelectors) {
     try {
       await page.waitForSelector(sel, { timeout: 3_000 });
       await page.fill(sel, searchQuery);
-      inputFilled = true;
+      filledSelector = sel;
       break;
     } catch {
       // try next selector
     }
   }
 
-  if (!inputFilled) {
+  if (!filledSelector) {
     throw new Error(
       "Could not locate search field on rekvizitai.vz.lt. " +
         "The page structure may have changed — update searchInputSelectors in navigate.ts."
     );
   }
 
-  // Submit the search
-  await page.keyboard.press("Enter");
+  // Press Enter directly on the input element (more reliable than keyboard.press globally)
+  const homeUrl = page.url();
+  await page.press(filledSelector, "Enter");
+
+  // Wait for navigation away from the home page
+  await page
+    .waitForURL((url) => url.toString() !== homeUrl, { timeout: NAV_TIMEOUT })
+    .catch(() => {});
   await page.waitForLoadState("networkidle", { timeout: NAV_TIMEOUT }).catch(() => {});
 
   // Give JS-rendered results time to appear
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(2000);
 
   // If the site redirected directly to a company profile page, we're done.
   const currentUrl = page.url();
@@ -65,7 +71,8 @@ export async function navigateToCompanyProfile(
     return;
   }
 
-  // Collect all company profile links from the results page in one query
+  // Collect company profile links only from the search results area.
+  // Filter to links that are NOT also present on the home page (avoid nav/featured links).
   const profileLinks = await page
     .locator('a[href*="/imone/"], a[href*="/en/company/"]')
     .evaluateAll((els) =>
@@ -97,5 +104,6 @@ export async function navigateToCompanyProfile(
 }
 
 function isCompanyProfileUrl(url: string): boolean {
-  return /rekvizitai\.vz\.lt\/(en\/company|imone)\//.test(url);
+  // Must have a non-empty slug after /imone/ or /en/company/ (not just /?query)
+  return /rekvizitai\.vz\.lt\/(en\/company|imone)\/[^?][^/]+/.test(url);
 }

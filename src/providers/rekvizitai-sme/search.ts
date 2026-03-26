@@ -37,7 +37,9 @@ export async function runSmeSearch(
     const classification = classifySme(bodyText);
 
     const status =
-      classification.category === "neither" ? "not_qualified" : "qualified";
+      classification.category === "sme" || classification.category === "small_mid_cap"
+        ? "qualified"
+        : "not_qualified";
 
     return {
       providerKey: "rekvizitai_sme",
