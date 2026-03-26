@@ -18,51 +18,13 @@ export async function navigateToCompanyProfile(
 ): Promise<void> {
   page.setDefaultTimeout(NAV_TIMEOUT);
 
-  await page.goto(REKVIZITAI_BASE_URL, { waitUntil: "networkidle" });
-
   const searchQuery = idCode?.trim() || borrowerName.trim();
 
-  // Try multiple selector patterns for the search input
-  const searchInputSelectors = [
-    'input[name="q"]',
-    'input[type="search"]',
-    'input[placeholder*="Ieškoti" i]',
-    'input[placeholder*="pavadinimas" i]',
-    'input[placeholder*="kodas" i]',
-    'input[id*="search" i]',
-    'input[class*="search" i]',
-  ];
-
-  let filledSelector: string | null = null;
-  for (const sel of searchInputSelectors) {
-    try {
-      await page.waitForSelector(sel, { timeout: 3_000 });
-      await page.fill(sel, searchQuery);
-      filledSelector = sel;
-      break;
-    } catch {
-      // try next selector
-    }
-  }
-
-  if (!filledSelector) {
-    throw new Error(
-      "Could not locate search field on rekvizitai.vz.lt. " +
-        "The page structure may have changed — update searchInputSelectors in navigate.ts."
-    );
-  }
-
-  // Press Enter directly on the input element (more reliable than keyboard.press globally)
-  const homeUrl = page.url();
-  await page.press(filledSelector, "Enter");
-
-  // Wait for navigation away from the home page
-  await page
-    .waitForURL((url) => url.toString() !== homeUrl, { timeout: NAV_TIMEOUT })
-    .catch(() => {});
-  await page.waitForLoadState("networkidle", { timeout: NAV_TIMEOUT }).catch(() => {});
-
-  // Give JS-rendered results time to appear
+  // Navigate directly to the search results URL, bypassing the homepage form and
+  // any autocomplete that could redirect to the wrong company.
+  const searchUrl =
+    `${REKVIZITAI_BASE_URL}imone/?paieska=${encodeURIComponent(searchQuery)}`;
+  await page.goto(searchUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(2000);
 
   // If the site redirected directly to a company profile page, we're done.
@@ -71,21 +33,20 @@ export async function navigateToCompanyProfile(
     return;
   }
 
-  // Collect company profile links from the main content area only.
-  // Exclude links inside header, nav, footer, and sidebar — these contain
-  // featured/popular company links unrelated to the search query.
-  const profileLinks = await page.evaluate(() => {
+  // Collect company profile links from the main content area only,
+  // excluding nav/header/footer/sidebar featured-company blocks.
+  const profileLinks = await page.evaluate((): string[] => {
     return Array.from(document.querySelectorAll("a"))
       .filter((a) => {
         const href = a.getAttribute("href") ?? "";
         if (!href.includes("/imone/") && !href.includes("/en/company/")) {
           return false;
         }
-        // Exclude links inside layout/navigation zones
         const excluded = a.closest(
           "header, nav, footer, [role='navigation'], [role='banner'], " +
           "[role='contentinfo'], .header, .nav, .footer, .navbar, " +
-          ".sidebar, .widget, .top-bar, .menu"
+          ".sidebar, .widget, .top-bar, .menu, .popular, .featured, " +
+          ".reklama, .sponsored, .reklaminiai, .pagrindinis-blokas"
         );
         return !excluded;
       })
@@ -95,7 +56,8 @@ export async function navigateToCompanyProfile(
 
   if (profileLinks.length === 0) {
     throw new Error(
-      `No company found on rekvizitai.vz.lt matching "${searchQuery}"`
+      `No company found on rekvizitai.vz.lt matching "${searchQuery}" ` +
+      `(page after search: ${currentUrl})`
     );
   }
 
