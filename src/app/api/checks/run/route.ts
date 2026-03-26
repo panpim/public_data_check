@@ -27,23 +27,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const {
-    borrowerName,
-    idCode,
-    loanReference,
-    driveFolderUrl,
-    searchType = "individual" as SearchType,
-    providerKeys,
-  } = body;
+  const borrowerName = typeof body.borrowerName === "string" ? body.borrowerName : "";
+  const idCode = typeof body.idCode === "string" ? body.idCode : undefined;
+  const loanReference = typeof body.loanReference === "string" ? body.loanReference : undefined;
+  const driveFolderUrl = typeof body.driveFolderUrl === "string" ? body.driveFolderUrl : "";
+  const searchType: SearchType = body.searchType === "legal_entity" ? "legal_entity" : "individual";
+  const providerKeys = body.providerKeys;
 
-  if (typeof borrowerName !== "string" || !borrowerName.trim()) {
+  if (!borrowerName.trim()) {
     return NextResponse.json(
       { error: "borrowerName is required" },
       { status: 400 }
     );
   }
 
-  const folderId = extractFolderIdFromUrl(driveFolderUrl ?? "");
+  const folderId = extractFolderIdFromUrl(driveFolderUrl);
   if (!folderId) {
     return NextResponse.json(
       { error: "Invalid Google Drive folder URL" },
@@ -89,7 +87,7 @@ export async function POST(req: NextRequest) {
     idCode: idCode?.trim() || undefined,
     loanReference: loanReference?.trim() || undefined,
     driveFolderUrl,
-    initiatedByEmail: session.user.email,
+    initiatedByEmail: session.user.email!,
     searchType: searchType as SearchType,
     providerKeys: providerKeys as CheckProviderKey[],
   };
@@ -155,7 +153,7 @@ export async function POST(req: NextRequest) {
       results.map((result) =>
         db.searchRun.create({
           data: {
-            createdByEmail: session.user.email!,
+            createdByEmail: session.user!.email!,
             borrowerName: input.borrowerName,
             borrowerIdCode: input.idCode,
             loanReference: input.loanReference,

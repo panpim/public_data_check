@@ -44,6 +44,18 @@ const STATUS_BADGE: Record<
     className: "border-amber-500 bg-amber-500 text-white",
   },
   error: { label: "Error", variant: "outline" },
+  qualified: {
+    label: "Qualified",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
+  not_qualified: { label: "Not qualified", variant: "destructive" },
+  compliant: {
+    label: "Compliant",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
+  non_compliant: { label: "Non-compliant", variant: "destructive" },
 };
 
 export function HistoryTable() {

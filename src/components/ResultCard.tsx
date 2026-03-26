@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ResultStatus } from "@/lib/types";
 
 interface Props {
+  providerLabel: string;
   status: ResultStatus;
   resultsCount: number;
   summaryText: string;
@@ -29,29 +30,53 @@ const STATUS_CONFIG: Record<
     className: "border-amber-500 bg-amber-500 text-white",
   },
   error: { label: "TECHNICAL ERROR", variant: "outline" },
+  qualified: {
+    label: "QUALIFIED",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
+  not_qualified: {
+    label: "NOT QUALIFIED",
+    variant: "destructive",
+  },
+  compliant: {
+    label: "COMPLIANT",
+    variant: "outline",
+    className: "border-green-600 bg-green-600 text-white",
+  },
+  non_compliant: {
+    label: "NON-COMPLIANT",
+    variant: "destructive",
+  },
 };
 
 export function ResultCard({
+  providerLabel,
   status,
   resultsCount,
   summaryText,
   driveUrl,
   driveError,
 }: Props) {
-  const { label, variant, className: statusClassName } = STATUS_CONFIG[status] ?? STATUS_CONFIG.error;
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.error;
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {providerLabel}
+      </p>
       <div className="flex items-center gap-3">
         <Badge
-          variant={variant}
-          className={`text-xs font-bold tracking-wide px-3 py-1${statusClassName ? ` ${statusClassName}` : ""}`}
+          variant={config.variant}
+          className={`text-xs font-bold tracking-wide px-3 py-1${config.className ? ` ${config.className}` : ""}`}
         >
-          {label}
+          {config.label}
         </Badge>
-        <span className="text-sm text-muted-foreground">
-          {resultsCount} {resultsCount === 1 ? "result" : "results"}
-        </span>
+        {resultsCount > 0 && (
+          <span className="text-sm text-muted-foreground">
+            {resultsCount} {resultsCount === 1 ? "result" : "results"}
+          </span>
+        )}
       </div>
       <p className="text-sm">{summaryText}</p>
       {driveUrl && (
@@ -74,7 +99,8 @@ export function ResultCard({
             driveError.toLowerCase().includes("invalid credentials") ||
             driveError.toLowerCase().includes("unauthenticated")) && (
             <p className="text-sm text-muted-foreground">
-              Your Google session may have expired. Please sign out and sign back in to refresh your credentials.
+              Your Google session may have expired. Please sign out and sign
+              back in to refresh your credentials.
             </p>
           )}
         </div>
