@@ -89,21 +89,6 @@ export function parseTaxCompliance(bodyText: string): TaxComplianceData {
   };
 }
 
-// ── Generic "no debts" patterns ───────────────────────────────────────────────
-// These apply only when the page has no entity-specific debt phrases at all,
-// acting as a catch-all for pages that simply say "no debts" without naming VMI/Sodra.
-
-const GENERIC_NO_DEBT_PATTERNS = [
-  /^skol[ų]\s+n[eė]ra$/im,
-  /^[įi]siskolinim[ų]\s+n[eė]ra$/im,
-  /^n[eė]ra\s+skol[ų]$/im,
-  /^n[eė]ra\s+[įi]siskolinim[ų]$/im,
-];
-
-function hasGenericNoDebt(text: string): boolean {
-  return GENERIC_NO_DEBT_PATTERNS.some((p) => p.test(text));
-}
-
 // ── VMI detection ─────────────────────────────────────────────────────────────
 
 function detectVmiDebt(text: string): boolean {

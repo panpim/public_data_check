@@ -230,10 +230,23 @@ export function CheckForm() {
               status={result.status}
               resultsCount={result.resultsCount}
               summaryText={result.summaryText}
-              driveUrl={response.driveUrl}
-              driveError={response.driveError}
             />
           ))}
+          {response.driveUrl && (
+            <a
+              href={response.driveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-500 hover:underline block"
+            >
+              View combined PDF in Drive →
+            </a>
+          )}
+          {response.driveError && (
+            <p className="text-sm text-destructive">
+              Drive upload failed: {response.driveError}
+            </p>
+          )}
         </div>
       )}
     </div>
