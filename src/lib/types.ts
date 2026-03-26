@@ -1,8 +1,21 @@
 import type { DefaultSession } from "next-auth";
 
-export type CheckProviderKey = "avnt_insolvency";
+export type CheckProviderKey =
+  | "avnt_insolvency"
+  | "rekvizitai_sme"
+  | "rekvizitai_tax";
 
-export type ResultStatus = "no_match" | "match_found" | "ambiguous" | "error";
+export type SearchType = "individual" | "legal_entity";
+
+export type ResultStatus =
+  | "no_match"       // AVNT: no insolvency record found (green)
+  | "match_found"    // AVNT: insolvency record found (red)
+  | "ambiguous"      // AVNT only: multiple records, manual review needed (orange)
+  | "error"          // any provider: search failed (grey)
+  | "qualified"      // rekvizitai_sme: qualifies as SME or Small Mid-Cap (green)
+  | "not_qualified"  // rekvizitai_sme: does not meet either tier (red)
+  | "compliant"      // rekvizitai_tax: no VMI or Sodra debt (green)
+  | "non_compliant"; // rekvizitai_tax: debt present (red)
 
 export interface RunCheckInput {
   borrowerName: string;
@@ -10,13 +23,28 @@ export interface RunCheckInput {
   loanReference?: string;
   driveFolderUrl: string;
   initiatedByEmail: string;
-  providerKey: CheckProviderKey;
+  searchType: SearchType;
+  providerKeys: CheckProviderKey[];
 }
 
 export interface MatchedEntity {
   name: string;
   caseNumber?: string;
   status?: string;
+}
+
+export interface SmeClassification {
+  category: "sme" | "small_mid_cap" | "neither" | "unknown";
+  employeesCount?: number;
+  annualRevenue?: number; // EUR
+}
+
+export interface TaxComplianceData {
+  hasVmiDebt: boolean;
+  hasSodraDebt: boolean;
+  // Present only when the flag is true AND the site shows an amount
+  vmiDebtAmount?: string;
+  sodraDebtAmount?: string;
 }
 
 export interface NormalizedCheckResult {
@@ -30,13 +58,14 @@ export interface NormalizedCheckResult {
   matchedEntities: MatchedEntity[];
   summaryText: string;
   screenshotBuffer?: Buffer;
+  classification?: SmeClassification;   // rekvizitai_sme only
+  complianceData?: TaxComplianceData;   // rekvizitai_tax only
 }
 
 export interface PublicCheckProvider {
   runSearch(input: RunCheckInput): Promise<NormalizedCheckResult>;
 }
 
-// Extend next-auth Session to carry the user's Google access token
 declare module "next-auth" {
   interface Session extends DefaultSession {
     accessToken?: string;
