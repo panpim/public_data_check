@@ -163,5 +163,6 @@ describe("POST /api/checks/run", () => {
     const json = await res.json();
     expect(json.driveError).toMatch(/Drive API error/);
     expect(json.driveUrl).toBeUndefined();
+    expect(json.results).toHaveLength(1);
   });
 });

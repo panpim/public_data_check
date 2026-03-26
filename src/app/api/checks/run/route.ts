@@ -20,7 +20,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const {
     borrowerName,
     idCode,
@@ -30,7 +36,7 @@ export async function POST(req: NextRequest) {
     providerKeys,
   } = body;
 
-  if (!borrowerName?.trim()) {
+  if (typeof borrowerName !== "string" || !borrowerName.trim()) {
     return NextResponse.json(
       { error: "borrowerName is required" },
       { status: 400 }
@@ -52,6 +58,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Pass 1: all keys must be recognised
   for (const key of providerKeys as string[]) {
     if (!getProvider(key)) {
       return NextResponse.json(
@@ -59,16 +66,19 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (
-      searchType === "individual" &&
-      REKVIZITAI_KEYS.includes(key as CheckProviderKey)
-    ) {
-      return NextResponse.json(
-        {
-          error: `Provider "${key}" is only available for legal entity searches`,
-        },
-        { status: 400 }
-      );
+  }
+
+  // Pass 2: Rekvizitai providers require legal entity search type
+  if (searchType === "individual") {
+    for (const key of providerKeys as string[]) {
+      if (REKVIZITAI_KEYS.includes(key as CheckProviderKey)) {
+        return NextResponse.json(
+          {
+            error: `Provider "${key}" is only available for legal entity searches`,
+          },
+          { status: 400 }
+        );
+      }
     }
   }
 
