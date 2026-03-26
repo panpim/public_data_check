@@ -24,7 +24,7 @@ export async function navigateToCompanyProfile(
   // any autocomplete that could redirect to the wrong company.
   const searchUrl =
     `${REKVIZITAI_BASE_URL}imone/?paieska=${encodeURIComponent(searchQuery)}`;
-  await page.goto(searchUrl, { waitUntil: "networkidle" });
+  await page.goto(searchUrl, { waitUntil: "load" });
   await page.waitForTimeout(2000);
 
   // If the site redirected directly to a company profile page, we're done.
@@ -74,7 +74,7 @@ export async function navigateToCompanyProfile(
     ? href
     : `https://rekvizitai.vz.lt${href}`;
 
-  await page.goto(url, { waitUntil: "networkidle" });
+  await page.goto(url, { waitUntil: "load" });
 }
 
 function isCompanyProfileUrl(url: string): boolean {
