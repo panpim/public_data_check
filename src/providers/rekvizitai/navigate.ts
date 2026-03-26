@@ -6,8 +6,9 @@ const NAV_TIMEOUT = 30_000;
 /**
  * Navigate an existing Playwright page to the company profile on rekvizitai.vz.lt.
  *
- * Searches by idCode if provided (more precise), otherwise by borrowerName.
- * Throws if no company is found or if multiple results are found when searching by name.
+ * Searches by borrowerName (idCode is used only to disambiguate when multiple results
+ * are found — the site does not support numeric code search via the URL parameter).
+ * Throws if no company is found or if multiple results are found and no idCode is given.
  *
  * The caller is responsible for creating the Page and closing the browser.
  */
@@ -18,12 +19,22 @@ export async function navigateToCompanyProfile(
 ): Promise<void> {
   page.setDefaultTimeout(NAV_TIMEOUT);
 
-  const searchQuery = idCode?.trim() || borrowerName.trim();
+  // Step 1: Accept the CookieBot consent banner so search results load properly.
+  await page.goto(REKVIZITAI_BASE_URL, { waitUntil: "load" });
+  try {
+    await page.waitForSelector("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll", {
+      timeout: 8_000,
+    });
+    await page.click("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll");
+    await page.waitForTimeout(1000);
+  } catch {
+    // Cookie dialog not present (already accepted in this session) — continue.
+  }
 
-  // Navigate directly to the search results URL, bypassing the homepage form and
-  // any autocomplete that could redirect to the wrong company.
+  // Step 2: Navigate to search results. Always search by company name because the
+  // site's ?paieska= parameter does not resolve numeric company codes.
   const searchUrl =
-    `${REKVIZITAI_BASE_URL}imone/?paieska=${encodeURIComponent(searchQuery)}`;
+    `${REKVIZITAI_BASE_URL}imone/?paieska=${encodeURIComponent(borrowerName.trim())}`;
   await page.goto(searchUrl, { waitUntil: "load" });
   await page.waitForTimeout(2000);
 
@@ -33,8 +44,10 @@ export async function navigateToCompanyProfile(
     return;
   }
 
-  // Collect company profile links from the main content area only,
-  // excluding nav/header/footer/sidebar featured-company blocks.
+  // Step 3: Collect actual search-result links. The page has two non-result zones:
+  //   - .companies-row  → ad/featured companies (header area)
+  //   - .links.mt-4     → "popular/recently viewed" sidebar block
+  // We only want links that live outside both of those containers.
   const profileLinks = await page.evaluate((): string[] => {
     return Array.from(document.querySelectorAll("a"))
       .filter((a) => {
@@ -43,6 +56,7 @@ export async function navigateToCompanyProfile(
           return false;
         }
         const excluded = a.closest(
+          ".companies-row, .links, " +
           "header, nav, footer, [role='navigation'], [role='banner'], " +
           "[role='contentinfo'], .header, .nav, .footer, .navbar, " +
           ".sidebar, .widget, .top-bar, .menu, .popular, .featured, " +
@@ -56,25 +70,40 @@ export async function navigateToCompanyProfile(
 
   if (profileLinks.length === 0) {
     throw new Error(
-      `No company found on rekvizitai.vz.lt matching "${searchQuery}" ` +
+      `No company found on rekvizitai.vz.lt matching "${borrowerName}" ` +
       `(page after search: ${currentUrl})`
     );
   }
 
-  if (profileLinks.length > 1 && !idCode) {
+  if (profileLinks.length === 1) {
+    const href = profileLinks[0];
+    const url = href.startsWith("http") ? href : `${REKVIZITAI_BASE_URL}${href.replace(/^\//, "")}`;
+    await page.goto(url, { waitUntil: "load" });
+    return;
+  }
+
+  // Multiple results: if an idCode was provided, navigate to each candidate and
+  // pick the one whose page body contains the company code.
+  if (idCode) {
+    for (const href of profileLinks.slice(0, 5)) {
+      const url = href.startsWith("http") ? href : `${REKVIZITAI_BASE_URL}${href.replace(/^\//, "")}`;
+      await page.goto(url, { waitUntil: "load" });
+      await page.waitForTimeout(500);
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      if (bodyText.includes(idCode.trim())) {
+        return; // Correct company — stay on this page.
+      }
+    }
     throw new Error(
-      `Multiple companies found on rekvizitai.vz.lt for "${borrowerName}". ` +
-        "Provide ID code to narrow the search."
+      `None of the ${profileLinks.length} companies found for "${borrowerName}" ` +
+      `on rekvizitai.vz.lt contain the ID code "${idCode}".`
     );
   }
 
-  // Navigate to the first (or only) result
-  const href = profileLinks[0];
-  const url = href.startsWith("http")
-    ? href
-    : `https://rekvizitai.vz.lt${href}`;
-
-  await page.goto(url, { waitUntil: "load" });
+  throw new Error(
+    `Multiple companies found on rekvizitai.vz.lt for "${borrowerName}". ` +
+    "Provide an ID code to narrow the search."
+  );
 }
 
 function isCompanyProfileUrl(url: string): boolean {
