@@ -36,6 +36,8 @@ function makeReq(body: object) {
 const validBody = {
   borrowerName: "UAB Test",
   driveFolderUrl: "https://drive.google.com/drive/folders/abc123",
+  searchType: "individual",
+  providerKeys: ["avnt_insolvency"],
 };
 
 const mockSearchResult = {
@@ -74,15 +76,37 @@ describe("POST /api/checks/run", () => {
     expect((await res.json()).error).toMatch(/Drive/);
   });
 
+  it("returns 400 when providerKeys is empty", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    const res = await POST(makeReq({ ...validBody, providerKeys: [] }));
+    expect(res.status).toBe(400);
+  });
+
   it("returns 400 for unknown provider key", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     vi.mocked(getProvider).mockReturnValue(null);
-    const res = await POST(makeReq({ ...validBody, providerKey: "unknown" }));
+    const res = await POST(makeReq({ ...validBody, providerKeys: ["unknown_provider"] }));
     expect(res.status).toBe(400);
   });
 
-  it("runs full pipeline and returns 200 with result", async () => {
+  it("returns 400 when Rekvizitai provider is requested for individual search", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    vi.mocked(getProvider).mockReturnValue({ runSearch: vi.fn() });
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "individual",
+        providerKeys: ["avnt_insolvency", "rekvizitai_sme"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/legal entity/i);
+  });
+
+  it("runs single provider and returns 200 with results array", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     vi.mocked(getProvider).mockReturnValue({
@@ -96,9 +120,34 @@ describe("POST /api/checks/run", () => {
     const res = await POST(makeReq(validBody));
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.status).toBe("no_match");
-    expect(json.runId).toBe("run-1");
+    expect(json.results).toHaveLength(1);
+    expect(json.results[0].status).toBe("no_match");
+    expect(json.runGroupId).toBeDefined();
     expect(json.driveUrl).toBe("https://drive.google.com/file/d/file-1/view");
+  });
+
+  it("runs multiple providers and returns 200 with results array", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    vi.mocked(getProvider).mockReturnValue({
+      runSearch: vi.fn().mockResolvedValue(mockSearchResult),
+    });
+    vi.mocked(uploadFileToDrive).mockResolvedValue({
+      fileId: "file-1",
+      webViewLink: "https://drive.google.com/file/d/file-1/view",
+    });
+
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "legal_entity",
+        providerKeys: ["avnt_insolvency", "rekvizitai_sme", "rekvizitai_tax"],
+      })
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.results).toHaveLength(3);
+    expect(json.runGroupId).toBeDefined();
   });
 
   it("returns 200 with driveError when Drive upload fails", async () => {

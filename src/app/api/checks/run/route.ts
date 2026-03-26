@@ -5,7 +5,14 @@ import { getProvider } from "@/providers/registry";
 import { generateEvidencePdf } from "@/services/evidence";
 import { extractFolderIdFromUrl, uploadFileToDrive } from "@/services/drive";
 import { db } from "@/lib/db";
-import type { RunCheckInput, NormalizedCheckResult } from "@/lib/types";
+import type {
+  RunCheckInput,
+  NormalizedCheckResult,
+  CheckProviderKey,
+  SearchType,
+} from "@/lib/types";
+
+const REKVIZITAI_KEYS: CheckProviderKey[] = ["rekvizitai_sme", "rekvizitai_tax"];
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -19,7 +26,8 @@ export async function POST(req: NextRequest) {
     idCode,
     loanReference,
     driveFolderUrl,
-    providerKey = "avnt_insolvency",
+    searchType = "individual" as SearchType,
+    providerKeys,
   } = body;
 
   if (!borrowerName?.trim()) {
@@ -37,13 +45,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const provider = getProvider(providerKey);
-  if (!provider) {
+  if (!Array.isArray(providerKeys) || providerKeys.length === 0) {
     return NextResponse.json(
-      { error: `Unknown provider: ${providerKey}` },
+      { error: "providerKeys must be a non-empty array" },
       { status: 400 }
     );
   }
+
+  for (const key of providerKeys as string[]) {
+    if (!getProvider(key)) {
+      return NextResponse.json(
+        { error: `Unknown provider: ${key}` },
+        { status: 400 }
+      );
+    }
+    if (
+      searchType === "individual" &&
+      REKVIZITAI_KEYS.includes(key as CheckProviderKey)
+    ) {
+      return NextResponse.json(
+        {
+          error: `Provider "${key}" is only available for legal entity searches`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  const runGroupId = crypto.randomUUID();
 
   const input: RunCheckInput = {
     borrowerName: borrowerName.trim(),
@@ -51,36 +80,44 @@ export async function POST(req: NextRequest) {
     loanReference: loanReference?.trim() || undefined,
     driveFolderUrl,
     initiatedByEmail: session.user.email,
-    providerKey,
+    searchType: searchType as SearchType,
+    providerKeys: providerKeys as CheckProviderKey[],
   };
 
   try {
-    let result: NormalizedCheckResult;
-    try {
-      result = await provider.runSearch(input);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      result = {
-        providerKey,
-        sourceUrl: "",
-        searchedAt: new Date().toISOString(),
-        borrowerNameInput: input.borrowerName,
-        status: "error",
-        resultsCount: 0,
-        matchedEntities: [],
-        summaryText: `Search failed: ${message}`,
-      };
-    }
+    const results: NormalizedCheckResult[] = await Promise.all(
+      (providerKeys as string[]).map(async (key) => {
+        const provider = getProvider(key)!;
+        try {
+          return await provider.runSearch(input);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return {
+            providerKey: key as CheckProviderKey,
+            sourceUrl: "",
+            searchedAt: new Date().toISOString(),
+            borrowerNameInput: input.borrowerName,
+            status: "error",
+            resultsCount: 0,
+            matchedEntities: [],
+            summaryText: `Search failed: ${message}`,
+          } satisfies NormalizedCheckResult;
+        }
+      })
+    );
 
     const safeName = input.borrowerName
-      .replace(/\s+/g, "_")
-      .replace(/[^a-zA-Z0-9_\-.]/g, "_");
-    const filename = `${providerKey}_${safeName}_${Date.now()}.pdf`;
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9\-]/g, "-")
+      .toLowerCase();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const shortId = runGroupId.replace(/-/g, "").slice(0, 8);
+    const filename = `${safeName}-${dateStr}-${shortId}.pdf`;
 
     let pdfBuffer: Buffer | undefined;
     let pdfError: string | undefined;
     try {
-      pdfBuffer = await generateEvidencePdf(input, result, filename);
+      pdfBuffer = await generateEvidencePdf(input, results, filename, runGroupId);
     } catch (err) {
       pdfError = err instanceof Error ? err.message : String(err);
     }
@@ -104,38 +141,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const run = await db.searchRun.create({
-      data: {
-        createdByEmail: session.user.email!,
-        borrowerName: input.borrowerName,
-        borrowerIdCode: input.idCode,
-        loanReference: input.loanReference,
-        providerKey,
-        driveFolderUrl,
-        resultStatus: result.status,
-        resultsCount: result.resultsCount,
-        matchedSummary: result.summaryText,
-        uploadedFileId,
-        uploadedFileUrl,
-        requestPayloadJson: JSON.stringify(input),
-        normalizedResultJson: JSON.stringify({
-          ...result,
-          screenshotBuffer: undefined,
-        }),
-      },
-    });
+    await Promise.all(
+      results.map((result) =>
+        db.searchRun.create({
+          data: {
+            createdByEmail: session.user.email!,
+            borrowerName: input.borrowerName,
+            borrowerIdCode: input.idCode,
+            loanReference: input.loanReference,
+            providerKey: result.providerKey,
+            driveFolderUrl,
+            runGroupId,
+            searchType: input.searchType,
+            resultStatus: result.status,
+            resultsCount: result.resultsCount,
+            matchedSummary: result.summaryText,
+            uploadedFileId,
+            uploadedFileUrl,
+            requestPayloadJson: JSON.stringify(input),
+            normalizedResultJson: JSON.stringify({
+              ...result,
+              screenshotBuffer: undefined,
+            }),
+          },
+        })
+      )
+    );
 
     return NextResponse.json({
-      runId: run.id,
-      status: result.status,
-      resultsCount: result.resultsCount,
-      summaryText: result.summaryText,
+      runGroupId,
+      results: results.map((r) => ({
+        providerKey: r.providerKey,
+        status: r.status,
+        resultsCount: r.resultsCount,
+        summaryText: r.summaryText,
+        matchedEntities: r.matchedEntities,
+        classification: r.classification,
+        complianceData: r.complianceData,
+      })),
       driveUrl: uploadedFileUrl,
-      ...(driveError ? { driveError } : {}),
-      ...(pdfError ? { driveError: `PDF generation failed: ${pdfError}` } : {}),
+      ...(driveError
+        ? { driveError }
+        : pdfError
+        ? { driveError: `PDF generation failed: ${pdfError}` }
+        : {}),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
+    const message =
+      err instanceof Error ? err.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
