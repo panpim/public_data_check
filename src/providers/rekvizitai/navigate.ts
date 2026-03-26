@@ -6,9 +6,9 @@ const NAV_TIMEOUT = 30_000;
 /**
  * Navigate an existing Playwright page to the company profile on rekvizitai.vz.lt.
  *
- * Searches by borrowerName (idCode is used only to disambiguate when multiple results
- * are found — the site does not support numeric code search via the URL parameter).
- * Throws if no company is found or if multiple results are found and no idCode is given.
+ * Fills the homepage search form (name + optional company_code) and submits it,
+ * then navigates to the first matching company profile.
+ * Throws if no company is found.
  *
  * The caller is responsible for creating the Page and closing the browser.
  */
@@ -19,8 +19,10 @@ export async function navigateToCompanyProfile(
 ): Promise<void> {
   page.setDefaultTimeout(NAV_TIMEOUT);
 
-  // Step 1: Accept the CookieBot consent banner so search results load properly.
+  // Step 1: Load the homepage and accept the CookieBot consent banner so the
+  // search form and AJAX results render correctly.
   await page.goto(REKVIZITAI_BASE_URL, { waitUntil: "load" });
+  await page.waitForTimeout(1000);
   try {
     await page.waitForSelector("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll", {
       timeout: 8_000,
@@ -28,44 +30,47 @@ export async function navigateToCompanyProfile(
     await page.click("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll");
     await page.waitForTimeout(1000);
   } catch {
-    // Cookie dialog not present (already accepted in this session) — continue.
+    // Dialog not present — already dismissed in this session.
   }
 
-  // Step 2: Navigate to search results. Always search by company name because the
-  // site's ?paieska= parameter does not resolve numeric company codes.
-  const searchUrl =
-    `${REKVIZITAI_BASE_URL}imone/?paieska=${encodeURIComponent(borrowerName.trim())}`;
-  await page.goto(searchUrl, { waitUntil: "load" });
+  // Step 2: Fill the search form. The homepage form uses input[name="name"] for
+  // company name and input[name="company_code"] for the registry code.
+  await page.waitForSelector("input[name='name']", { timeout: 10_000 });
+  await page.fill("input[name='name']", borrowerName.trim());
+  if (idCode) {
+    await page.fill("input[name='company_code']", idCode.trim());
+  }
+
+  // Step 3: Submit and wait for navigation to the search results page (/imones/1/).
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load", timeout: NAV_TIMEOUT }),
+    page.click("button#ok"),
+  ]);
   await page.waitForTimeout(2000);
 
-  // If the site redirected directly to a company profile page, we're done.
+  // If the site went directly to a company profile (single exact match), we're done.
   const currentUrl = page.url();
   if (isCompanyProfileUrl(currentUrl)) {
     return;
   }
 
-  // Step 3: Collect actual search-result links. The page has two non-result zones:
-  //   - .companies-row  → ad/featured companies (header area)
-  //   - .links.mt-4     → "popular/recently viewed" sidebar block
-  // We only want links that live outside both of those containers.
+  // Step 4: Collect search-result profile links. The results page (/imones/) has
+  // actual results in a card area, followed by .links (popular/recently-viewed)
+  // and .companies-row (ad slots). We only want the actual result cards.
   const profileLinks = await page.evaluate((): string[] => {
-    return Array.from(document.querySelectorAll("a"))
-      .filter((a) => {
-        const href = a.getAttribute("href") ?? "";
-        if (!href.includes("/imone/") && !href.includes("/en/company/")) {
-          return false;
-        }
-        const excluded = a.closest(
-          ".companies-row, .links, " +
-          "header, nav, footer, [role='navigation'], [role='banner'], " +
-          "[role='contentinfo'], .header, .nav, .footer, .navbar, " +
-          ".sidebar, .widget, .top-bar, .menu, .popular, .featured, " +
-          ".reklama, .sponsored, .reklaminiai, .pagrindinis-blokas"
-        );
-        return !excluded;
-      })
-      .map((a) => a.getAttribute("href"))
-      .filter(Boolean) as string[];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const a of Array.from(document.querySelectorAll("a"))) {
+      const href = a.getAttribute("href") ?? "";
+      if (!href.includes("/imone/") && !href.includes("/en/company/")) continue;
+      // Skip links inside known non-result zones
+      if (a.closest(".links, .companies-row, header, nav, footer, .sidebar, .widget")) continue;
+      if (!seen.has(href)) {
+        seen.add(href);
+        result.push(href);
+      }
+    }
+    return result;
   });
 
   if (profileLinks.length === 0) {
@@ -82,8 +87,8 @@ export async function navigateToCompanyProfile(
     return;
   }
 
-  // Multiple results: if an idCode was provided, navigate to each candidate and
-  // pick the one whose page body contains the company code.
+  // Multiple results: if an idCode was provided, check each candidate's page body
+  // for the company code and stop at the matching one.
   if (idCode) {
     for (const href of profileLinks.slice(0, 5)) {
       const url = href.startsWith("http") ? href : `${REKVIZITAI_BASE_URL}${href.replace(/^\//, "")}`;
