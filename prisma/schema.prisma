@@ -18,6 +18,9 @@ model SearchRun {
   providerKey          String
   driveFolderUrl       String
 
+  runGroupId           String?
+  searchType           String?
+
   resultStatus         String
   resultsCount         Int
   matchedSummary       String?
