@@ -15,6 +15,10 @@ export async function runSmeSearch(
   let browser;
 
   try {
+    // Stagger browser launch to avoid simultaneous socket contention with
+    // the tax provider. SME goes first; tax waits 1 500 ms (see rekvizitai-tax).
+    await new Promise((r) => setTimeout(r, 300));
+
     browser = await chromium.launch({
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
