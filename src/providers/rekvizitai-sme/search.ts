@@ -157,8 +157,8 @@ function parseRevenue(text: string): number | undefined {
   for (const { re, multiplier } of patterns) {
     const match = text.match(re);
     if (match) {
-      // Remove spaces (thousands separator) and replace comma with dot
-      const cleaned = match[1].replace(/\s/g, "").replace(",", ".");
+      // Remove spaces (thousands separator) and replace all commas with dot
+      const cleaned = match[1].replace(/\s/g, "").replace(/,/g, ".");
       const num = parseFloat(cleaned);
       if (!isNaN(num)) return Math.round(num * multiplier);
     }
