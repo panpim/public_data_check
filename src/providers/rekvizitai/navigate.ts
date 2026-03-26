@@ -56,40 +56,23 @@ export async function navigateToCompanyProfile(
   await page.keyboard.press("Enter");
   await page.waitForLoadState("networkidle", { timeout: NAV_TIMEOUT }).catch(() => {});
 
+  // Give JS-rendered results time to appear
+  await page.waitForTimeout(1500);
+
   // If the site redirected directly to a company profile page, we're done.
   const currentUrl = page.url();
   if (isCompanyProfileUrl(currentUrl)) {
     return;
   }
 
-  // Otherwise we're on a results page — collect links to company profiles.
-  const companyLinkSelectors = [
-    'a[href*="/imone/"]',
-    'a[href*="/en/company/"]',
-    '.company-list a',
-    '.search-results a[href*="/"]',
-    'table.companies tbody tr a',
-    'ul.results li a',
-  ];
-
-  let profileLinks: string[] = [];
-  for (const sel of companyLinkSelectors) {
-    try {
-      const elements = await page.locator(sel).all();
-      if (elements.length > 0) {
-        const hrefs = await Promise.all(elements.map((el) => el.getAttribute("href")));
-        const companyHrefs = (hrefs.filter(Boolean) as string[]).filter(
-          (h) => isCompanyProfileUrl(h) || h.includes("/imone/") || h.includes("/en/company/")
-        );
-        if (companyHrefs.length > 0) {
-          profileLinks = companyHrefs;
-          break;
-        }
-      }
-    } catch {
-      // try next selector
-    }
-  }
+  // Collect all company profile links from the results page in one query
+  const profileLinks = await page
+    .locator('a[href*="/imone/"], a[href*="/en/company/"]')
+    .evaluateAll((els) =>
+      els
+        .map((el) => (el as HTMLAnchorElement).getAttribute("href"))
+        .filter(Boolean)
+    ) as string[];
 
   if (profileLinks.length === 0) {
     throw new Error(

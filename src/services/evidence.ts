@@ -328,6 +328,8 @@ function getStatusLabel(status: ResultStatus): string {
 
 function sanitizeForPdf(text: string): string {
   return text
+    // Strip control characters (0x00–0x1F except tab/newline, and 0x7F)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
     .replace(/[Ąą]/g, (c) => (c === c.toUpperCase() ? "A" : "a"))
     .replace(/[Čč]/g, (c) => (c === c.toUpperCase() ? "C" : "c"))
     .replace(/[Ęę]/g, (c) => (c === c.toUpperCase() ? "E" : "e"))

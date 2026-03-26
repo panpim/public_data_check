@@ -15,9 +15,13 @@ export async function runTaxSearch(
   let browser;
 
   try {
+    // Stagger browser launch slightly to avoid simultaneous socket contention
+    // when multiple Rekvizitai providers run in parallel.
+    await new Promise((r) => setTimeout(r, 800));
+
     browser = await chromium.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
 
     const context = await browser.newContext({
