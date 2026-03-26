@@ -1,5 +1,4 @@
 import type { PublicCheckProvider } from "@/lib/types";
-import type { NormalizedCheckResult, RunCheckInput } from "@/lib/types";
 import { runTaxSearch } from "./search";
 
 export class RekvizitaiTaxProvider implements PublicCheckProvider {

@@ -49,4 +49,10 @@ describe("parseTaxCompliance", () => {
     expect(result.hasVmiDebt).toBe(true);
     expect(result.vmiDebtAmount).toBeUndefined();
   });
+
+  it("does not suppress VMI debt when page contains unrelated nėra text near VMI", () => {
+    const result = parseTaxCompliance("VMI skola: 1 200 EUR\nVMI duomenų nėra apie kitus");
+    expect(result.hasVmiDebt).toBe(true);
+    expect(result.vmiDebtAmount).toBe("1 200 EUR");
+  });
 });

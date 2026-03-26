@@ -115,7 +115,8 @@ function detectVmiDebt(text: string): boolean {
   ];
   const noDebtPatterns = [
     /mokestin[ių]\s+skol[ų]\s+n[eė]ra/i,
-    /vmi.*n[eė]ra/i,
+    /vmi\s+(?:skol[ų]\s+)?n[eė]ra/i,
+    /n[eė]ra\s+vmi\s+skol[ų]/i,
     /n[eė]turi\s+mokestin[ių]\s+skol[ų]/i,
   ];
 
@@ -142,7 +143,8 @@ function detectSodraDebt(text: string): boolean {
   ];
   const noDebtPatterns = [
     /sodr[ao]s?\s+skol[ų]\s+n[eė]ra/i,
-    /sodr[ao].*n[eė]ra/i,
+    /sodr[ao]s?\s+(?:skol[ų]\s+)?n[eė]ra/i,
+    /n[eė]ra\s+sodr[ao]s?\s+skol[ų]/i,
     /n[eė]turi\s+sodr[ao]s?\s+skol[ų]/i,
   ];
 
