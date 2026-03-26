@@ -71,15 +71,27 @@ export async function navigateToCompanyProfile(
     return;
   }
 
-  // Collect company profile links only from the search results area.
-  // Filter to links that are NOT also present on the home page (avoid nav/featured links).
-  const profileLinks = await page
-    .locator('a[href*="/imone/"], a[href*="/en/company/"]')
-    .evaluateAll((els) =>
-      els
-        .map((el) => (el as HTMLAnchorElement).getAttribute("href"))
-        .filter(Boolean)
-    ) as string[];
+  // Collect company profile links from the main content area only.
+  // Exclude links inside header, nav, footer, and sidebar — these contain
+  // featured/popular company links unrelated to the search query.
+  const profileLinks = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("a"))
+      .filter((a) => {
+        const href = a.getAttribute("href") ?? "";
+        if (!href.includes("/imone/") && !href.includes("/en/company/")) {
+          return false;
+        }
+        // Exclude links inside layout/navigation zones
+        const excluded = a.closest(
+          "header, nav, footer, [role='navigation'], [role='banner'], " +
+          "[role='contentinfo'], .header, .nav, .footer, .navbar, " +
+          ".sidebar, .widget, .top-bar, .menu"
+        );
+        return !excluded;
+      })
+      .map((a) => a.getAttribute("href"))
+      .filter(Boolean) as string[];
+  });
 
   if (profileLinks.length === 0) {
     throw new Error(
