@@ -17,9 +17,7 @@ export async function GET(req: NextRequest) {
   const skip = (page - 1) * limit;
   const q = searchParams.get("q")?.trim() || undefined;
 
-  const where = q
-    ? { borrowerName: { contains: q, mode: "insensitive" as const } }
-    : undefined;
+  const where = q ? { borrowerName: { contains: q } } : undefined;
 
   const [runs, total] = await Promise.all([
     db.searchRun.findMany({
