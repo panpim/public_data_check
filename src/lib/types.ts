@@ -5,7 +5,12 @@ export type CheckProviderKey =
   | "rekvizitai_sme"
   | "rekvizitai_tax";
 
-export type SearchType = "individual" | "legal_entity";
+export type SearchType =
+  | "individual"       // LT: natural person
+  | "legal_entity"     // LT: company
+  | "pl_company"       // PL/KRZ: Podmiot niebędący osobą fizyczną
+  | "pl_business_ind"  // PL/KRZ: Osoba fizyczna prowadząca działalność gospodarczą
+  | "pl_private_ind";  // PL/KRZ: Osoba fizyczna nieprowadząca działalności gospodarczej
 
 export type ResultStatus =
   | "no_match"       // AVNT: no insolvency record found (green)
