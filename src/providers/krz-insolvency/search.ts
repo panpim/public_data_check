@@ -37,23 +37,37 @@ export async function runKrzSearch(
     page.setDefaultTimeout(NAV_TIMEOUT);
 
     // Step 1: Load the base URL first so Angular can establish its session.
-    // Going directly to the deep-link URL triggers a /post-authorize redirect chain
-    // that must complete before the search form is rendered.
-    await page.goto(KRZ_BASE_URL, { waitUntil: "networkidle", timeout: NAV_TIMEOUT });
+    await page.goto(KRZ_BASE_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+    await page.waitForTimeout(3_000);
 
-    // Step 2: Navigate to the search page now that a session exists.
-    await page.goto(KRZ_SEARCH_URL, { waitUntil: "load", timeout: NAV_TIMEOUT });
+    // Step 2: Navigate to the search page.
+    await page.goto(KRZ_SEARCH_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
 
-    // Step 3: Wait for the Angular route to settle and the form to render.
-    // If the page is still in a post-authorize redirect, wait for it to resolve.
+    // Step 3: Wait for any post-authorize redirect to resolve (Angular hash routing).
     await page.waitForFunction(
       () => !window.location.href.includes("post-authorize"),
       { timeout: 20_000 }
-    );
+    ).catch(() => {}); // ignore — if no redirect, continue
 
-    // Wait for any visible text input (form is ready)
-    const firstInput = page.locator('input[type="text"]').first();
-    await firstInput.waitFor({ state: "visible", timeout: 15_000 });
+    // Step 4: Wait for the form to render.
+    // KRZ uses Angular and inputs may not have type="text" in the attribute.
+    // Try multiple selectors in order of specificity.
+    const formReadySelectors = [
+      'input[type="text"]',
+      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"])',
+      'input',
+    ];
+    let firstInput = page.locator('input').first();
+    for (const sel of formReadySelectors) {
+      const loc = page.locator(sel).first();
+      try {
+        await loc.waitFor({ state: "visible", timeout: 8_000 });
+        firstInput = loc;
+        break;
+      } catch {
+        // try next selector
+      }
+    }
 
     // Select entity type tab/radio — use locator with text matching (faster, no long timeouts)
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
@@ -67,15 +81,20 @@ export async function runKrzSearch(
       }
     }
 
-    // Fill name field — try specific selectors first, fall back to first visible text input
-    const nameInput =
-      (await page.locator('input[placeholder*="Nazwa" i]').count()) > 0
-        ? page.locator('input[placeholder*="Nazwa" i]').first()
-        : (await page.locator('input[ng-model*="nazwa" i], input[ng-model*="name" i]').count()) > 0
-        ? page.locator('input[ng-model*="nazwa" i], input[ng-model*="name" i]').first()
-        : page.locator('input[type="text"]').first();
-
-    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
+    // Fill name field — try specific selectors first, fall back to firstInput already found
+    const nameInputCandidates = [
+      page.locator('input[placeholder*="Nazwa" i]').first(),
+      page.locator('input[ng-model*="nazwa" i]').first(),
+      page.locator('input[ng-model*="name" i]').first(),
+      firstInput,
+    ];
+    let nameInput = firstInput;
+    for (const candidate of nameInputCandidates) {
+      if ((await candidate.count()) > 0) {
+        nameInput = candidate;
+        break;
+      }
+    }
     await nameInput.fill(input.borrowerName.trim());
 
     // Fill ID field if provided — use the second visible text input, or a labelled ID field
@@ -132,6 +151,17 @@ export async function runKrzSearch(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Capture a diagnostic screenshot if the browser/page is still open
+    let diagScreenshot: Buffer | undefined;
+    try {
+      if (browser) {
+        const pages = browser.contexts()[0]?.pages();
+        const activePage = pages?.[pages.length - 1];
+        if (activePage) {
+          diagScreenshot = await activePage.screenshot({ fullPage: true });
+        }
+      }
+    } catch { /* ignore screenshot errors */ }
     return {
       providerKey: "krz_insolvency",
       sourceUrl: KRZ_BASE_URL,
@@ -142,6 +172,7 @@ export async function runKrzSearch(
       resultsCount: 0,
       matchedEntities: [],
       summaryText: `KRZ search failed: ${message}`,
+      screenshotBuffer: diagScreenshot,
     };
   } finally {
     if (browser) await browser.close();
