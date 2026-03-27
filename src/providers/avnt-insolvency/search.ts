@@ -30,7 +30,7 @@ export async function runAvntSearch(
     const page = await context.newPage();
     page.setDefaultTimeout(NAV_TIMEOUT);
 
-    await page.goto(AVNT_BASE_URL, { waitUntil: "networkidle" });
+    await page.goto(AVNT_BASE_URL, { waitUntil: "load" });
 
     const nameFieldSelectors = [
       'input[placeholder="Įveskite paieškos žodį..."]',
@@ -105,7 +105,7 @@ export async function runAvntSearch(
     }
 
     await page
-      .waitForLoadState("networkidle", { timeout: RESULT_TIMEOUT })
+      .waitForLoadState("load", { timeout: RESULT_TIMEOUT })
       .catch(() => {});
     // Wait for AngularJS to re-render results after filtering
     await page.waitForTimeout(2_500);

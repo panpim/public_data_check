@@ -93,26 +93,27 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const results: NormalizedCheckResult[] = await Promise.all(
-      (providerKeys as string[]).map(async (key) => {
-        const provider = getProvider(key)!;
-        try {
-          return await provider.runSearch(input);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          return {
-            providerKey: key as CheckProviderKey,
-            sourceUrl: "",
-            searchedAt: new Date().toISOString(),
-            borrowerNameInput: input.borrowerName,
-            status: "error",
-            resultsCount: 0,
-            matchedEntities: [],
-            summaryText: `Search failed: ${message}`,
-          } satisfies NormalizedCheckResult;
-        }
-      })
-    );
+    // Run providers sequentially to avoid launching multiple Chromium browsers
+    // simultaneously, which causes socket exhaustion and navigation timeouts.
+    const results: NormalizedCheckResult[] = [];
+    for (const key of providerKeys as string[]) {
+      const provider = getProvider(key)!;
+      try {
+        results.push(await provider.runSearch(input));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        results.push({
+          providerKey: key as CheckProviderKey,
+          sourceUrl: "",
+          searchedAt: new Date().toISOString(),
+          borrowerNameInput: input.borrowerName,
+          status: "error",
+          resultsCount: 0,
+          matchedEntities: [],
+          summaryText: `Search failed: ${message}`,
+        } satisfies NormalizedCheckResult);
+      }
+    }
 
     const safeName = input.borrowerName
       .replace(/\s+/g, "-")
