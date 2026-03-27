@@ -74,82 +74,39 @@ export async function runKrzSearch(
       { timeout: 20_000 }
     ).catch(() => {}); // ignore — if no redirect, continue
 
-    // Step 4: Wait for the form to render.
-    // KRZ uses Angular and inputs may not have type="text" in the attribute.
-    // Try multiple selectors in order of specificity.
-    const formReadySelectors = [
-      'input[type="text"]',
-      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"])',
-      'input',
-    ];
-    let firstInput = page.locator('input').first();
-    for (const sel of formReadySelectors) {
-      const loc = page.locator(sel).first();
-      try {
-        await loc.waitFor({ state: "visible", timeout: 8_000 });
-        firstInput = loc;
-        break;
-      } catch {
-        // try next selector
-      }
-    }
+    // Step 4: Wait for the form to render — use exact known label text from the KRZ UI.
+    // "Nazwa podmiotu" is the name field label; wait for it to be visible as the form-ready signal.
+    const nameInput = page.getByLabel("Nazwa podmiotu");
+    await nameInput.waitFor({ state: "visible", timeout: 15_000 });
 
-    // Select entity type tab/radio — use locator with text matching (faster, no long timeouts)
+    // Step 5: Select entity type tab — exact Polish label text from the KRZ tabs.
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
     if (entityLabel) {
-      const tab = page.locator(`li, label, button, a`).filter({ hasText: entityLabel }).first();
       try {
-        await tab.click({ timeout: 3_000 });
-        await page.waitForTimeout(500);
-      } catch {
-        // entity type selector not found — proceed with default tab
-      }
+        const tab = page.locator(`li, label, button, a, span`).filter({ hasText: new RegExp(`^${entityLabel}$`) }).first();
+        if ((await tab.count()) > 0) {
+          await tab.click({ timeout: 3_000 });
+          await page.waitForTimeout(800);
+        }
+      } catch { /* proceed with default entity type */ }
     }
 
-    // Fill name field — try specific selectors first, fall back to firstInput already found
-    const nameInputCandidates = [
-      page.locator('input[placeholder*="Nazwa" i]').first(),
-      page.locator('input[ng-model*="nazwa" i]').first(),
-      page.locator('input[ng-model*="name" i]').first(),
-      firstInput,
-    ];
-    let nameInput = firstInput;
-    for (const candidate of nameInputCandidates) {
-      if ((await candidate.count()) > 0) {
-        nameInput = candidate;
-        break;
-      }
-    }
+    // Step 6: Fill the name field.
     await nameInput.fill(input.borrowerName.trim());
 
-    // Fill ID field if provided — use the second visible text input, or a labelled ID field
+    // Step 7: Fill the ID field if provided.
+    // Label: "Identyfikator (KRS, NIP lub inny identyfikator)"
     if (input.idCode) {
       try {
-        const idInput = page
-          .locator('input[placeholder*="KRS" i], input[placeholder*="NIP" i], input[placeholder*="numer" i], input[ng-model*="krs" i], input[ng-model*="nip" i]')
-          .first();
-        const idCount = await idInput.count();
-        if (idCount > 0) {
+        const idInput = page.getByLabel(/Identyfikator/i);
+        if ((await idInput.count()) > 0) {
           await idInput.fill(input.idCode.trim());
-        } else {
-          // Fall back to second text input (first is name, second is often ID)
-          const secondInput = page.locator('input[type="text"]').nth(1);
-          if ((await secondInput.count()) > 0) {
-            await secondInput.fill(input.idCode.trim());
-          }
         }
-      } catch {
-        // ID field not found — proceed without it
-      }
+      } catch { /* ID field not found — proceed without it */ }
     }
 
-    // Submit — try button with text, then submit button type, then Enter
-    const submitBtn = page.locator('button:has-text("Szukaj"), button:has-text("Wyszukaj"), button[type="submit"]').first();
-    if ((await submitBtn.count()) > 0) {
-      await submitBtn.click({ timeout: 3_000 });
-    } else {
-      await nameInput.press("Enter");
-    }
+    // Step 8: Submit — exact button text "Wyszukaj".
+    await page.getByRole("button", { name: "Wyszukaj" }).click({ timeout: 5_000 });
 
     // Wait for results to render
     await page.waitForLoadState("load", { timeout: RESULT_TIMEOUT }).catch(() => {});
