@@ -95,7 +95,7 @@ describe("POST /api/checks/run", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 when Rekvizitai provider is requested for individual search", async () => {
+  it("returns 400 when PL provider is requested for LT search type", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     vi.mocked(getProvider).mockReturnValue({ runSearch: vi.fn() });
@@ -103,11 +103,11 @@ describe("POST /api/checks/run", () => {
       makeReq({
         ...validBody,
         searchType: "individual",
-        providerKeys: ["avnt_insolvency", "rekvizitai_sme"],
+        providerKeys: ["avnt_insolvency", "krz_insolvency"],
       })
     );
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/legal entity/i);
+    expect((await res.json()).error).toMatch(/provider/i);
   });
 
   it("runs single provider and returns 200 with results array", async () => {
@@ -172,5 +172,46 @@ describe("POST /api/checks/run", () => {
     expect(json.driveError).toMatch(/Drive API error/);
     expect(json.driveUrl).toBeUndefined();
     expect(json.results).toHaveLength(1);
+  });
+
+  it("returns 400 for invalid searchType", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    vi.mocked(getProvider).mockReturnValue({ runSearch: vi.fn() });
+    const res = await POST(
+      makeReq({ ...validBody, searchType: "unknown_type" })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/searchType/i);
+  });
+
+  it("returns 400 when PL search type used with LT provider", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    vi.mocked(getProvider).mockReturnValue({ runSearch: vi.fn() });
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "pl_company",
+        providerKeys: ["avnt_insolvency"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/provider/i);
+  });
+
+  it("returns 400 when LT search type used with KRZ provider", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    vi.mocked(getProvider).mockReturnValue({ runSearch: vi.fn() });
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "legal_entity",
+        providerKeys: ["krz_insolvency"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/provider/i);
   });
 });

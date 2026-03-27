@@ -13,7 +13,26 @@ import type {
   SearchType,
 } from "@/lib/types";
 
-const REKVIZITAI_KEYS: CheckProviderKey[] = ["rekvizitai_sme", "rekvizitai_tax"];
+const VALID_SEARCH_TYPES: SearchType[] = [
+  "individual",
+  "legal_entity",
+  "pl_company",
+  "pl_business_ind",
+  "pl_private_ind",
+];
+
+const LT_PROVIDERS = new Set<CheckProviderKey>([
+  "avnt_insolvency",
+  "rekvizitai_sme",
+  "rekvizitai_tax",
+]);
+const PL_PROVIDERS = new Set<CheckProviderKey>(["krz_insolvency"]);
+
+function deriveCountry(st: SearchType): "LT" | "PL" {
+  return st === "pl_company" || st === "pl_business_ind" || st === "pl_private_ind"
+    ? "PL"
+    : "LT";
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,7 +51,16 @@ export async function POST(req: NextRequest) {
   const idCode = typeof body.idCode === "string" ? body.idCode : undefined;
   const loanReference = typeof body.loanReference === "string" ? body.loanReference : undefined;
   const driveFolderUrl = typeof body.driveFolderUrl === "string" ? body.driveFolderUrl : "";
-  const searchType: SearchType = body.searchType === "legal_entity" ? "legal_entity" : "individual";
+  const rawSearchType = body.searchType as string;
+  if (!VALID_SEARCH_TYPES.includes(rawSearchType as SearchType)) {
+    return NextResponse.json(
+      { error: `Invalid searchType. Must be one of: ${VALID_SEARCH_TYPES.join(", ")}` },
+      { status: 400 }
+    );
+  }
+  const searchType = rawSearchType as SearchType;
+  const country = deriveCountry(searchType);
+  const allowedProviders = country === "PL" ? PL_PROVIDERS : LT_PROVIDERS;
   const providerKeys = body.providerKeys;
 
   if (!borrowerName.trim()) {
@@ -67,17 +95,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Pass 2: Rekvizitai providers require legal entity search type
-  if (searchType === "individual") {
-    for (const key of providerKeys as string[]) {
-      if (REKVIZITAI_KEYS.includes(key as CheckProviderKey)) {
-        return NextResponse.json(
-          {
-            error: `Provider "${key}" is only available for legal entity searches`,
-          },
-          { status: 400 }
-        );
-      }
+  // Pass 2: Provider must belong to the derived country
+  for (const key of providerKeys as string[]) {
+    if (!allowedProviders.has(key as CheckProviderKey)) {
+      return NextResponse.json(
+        {
+          error: `Provider "${key}" is not available for ${country} searches`,
+        },
+        { status: 400 }
+      );
     }
   }
 
@@ -188,6 +214,7 @@ export async function POST(req: NextRequest) {
             driveFolderUrl,
             runGroupId,
             searchType: input.searchType,
+            country,
             resultStatus: result.status,
             resultsCount: result.resultsCount,
             matchedSummary: result.summaryText,
