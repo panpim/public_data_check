@@ -64,14 +64,12 @@ export async function runKrzSearch(
       } catch { /* not found, try next */ }
     }
 
-    // Step 3: Click the "Wyszukiwanie podmiotów" nav link to navigate within the Angular SPA.
-    // This is more reliable than goto(hash URL) because Angular handles the routing natively.
-    // The nav link text is "Wyszukiwanie podmiotów" (visible in the left sidebar).
-    await page.locator('a, li').filter({ hasText: /^Wyszukiwanie podmiotów$/ }).first()
-      .click({ timeout: 5_000 });
+    // Step 3: Navigate to the search page via JS hash navigation.
+    // Already on the domain — Angular treats this as an in-app route change,
+    // avoiding the post-authorize redirect that a fresh page.goto() triggers.
+    await page.evaluate((url: string) => { window.location.href = url; }, KRZ_SEARCH_URL);
 
-    // Step 4: Wait until the URL contains the search page identifier — confirms Angular
-    // has finished routing to the correct page (not still on post-authorize or landing).
+    // Step 4: Wait for Angular to route to the search page.
     await page.waitForURL(/WyszukiwaniePodmiotow/, { timeout: 20_000 });
     await page.waitForTimeout(800);
 
