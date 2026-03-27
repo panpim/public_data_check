@@ -78,7 +78,10 @@ export default function SelectCountryPage() {
         </p>
 
         {error && (
-          <p className="text-sm text-destructive text-center mb-6">{error}</p>
+          <div className="flex items-center justify-between gap-2 text-sm text-destructive text-center mb-6 bg-destructive/10 rounded px-3 py-2">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-2 text-xs underline shrink-0">Dismiss</button>
+          </div>
         )}
 
         <div className="grid grid-cols-2 gap-4">
