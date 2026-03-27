@@ -35,6 +35,13 @@ export async function runTaxSearch(
 
     await navigateToCompanyProfile(page, input.borrowerName, input.idCode);
 
+    // Navigate to the dedicated debt sub-page (/skolos/) which shows current
+    // VMI and Sodra debt totals directly rather than requiring regex on prose text.
+    const profileUrl = page.url().replace(/\/?$/, "/");
+    const skolosUrl = `${profileUrl}skolos/`;
+    await page.goto(skolosUrl, { waitUntil: "load" });
+    await page.waitForTimeout(1000);
+
     const screenshotBuffer = await page.screenshot({ fullPage: true });
     const finalUrl = page.url();
     const bodyText = await page.evaluate(() => document.body.innerText);
@@ -78,77 +85,43 @@ export async function runTaxSearch(
 }
 
 /**
- * Parse VMI and Sodra debt status from rekvizitai.vz.lt company profile body text.
+ * Parse VMI and Sodra debt totals from the rekvizitai.vz.lt /skolos/ sub-page.
+ *
+ * The page contains two labelled sections:
+ *   "Įmonės skola VMI"   → "Pradelsta nepriemoka iš viso  737 304,10 Eur"
+ *   "Įmonės skola Sodrai"→ "Skolos suma iš viso  15 730,83 Eur"
+ *
+ * A non-zero amount in either section means the company currently has that debt.
  *
  * Exported for unit testing.
  */
 export function parseTaxCompliance(bodyText: string): TaxComplianceData {
-  const hasVmiDebt = detectVmiDebt(bodyText);
-  const hasSodraDebt = detectSodraDebt(bodyText);
+  // VMI total — appears inside the "Įmonės skola VMI" section
+  const vmiMatch = bodyText.match(
+    /Įmonės\s+skola\s+VMI[\s\S]{0,400}?Pradelsta\s+nepriemoka\s+iš\s+viso\s+([\d\s,.]+)\s*Eur/i
+  );
+
+  // Sodra total — appears inside the "Įmonės skola Sodrai" section.
+  // Note: "Skolos suma iš viso" also appears earlier for company debts (Juris LT),
+  // so we anchor specifically to the Sodrai section header.
+  const sodraMatch = bodyText.match(
+    /Įmonės\s+skola\s+Sodrai[\s\S]{0,400}?Skolos\s+suma\s+iš\s+viso\s+([\d\s,.]+)\s*Eur/i
+  );
+
+  const vmiTotal = vmiMatch ? parseAmountValue(vmiMatch[1]) : 0;
+  const sodraTotal = sodraMatch ? parseAmountValue(sodraMatch[1]) : 0;
 
   return {
-    hasVmiDebt,
-    hasSodraDebt,
-    vmiDebtAmount: hasVmiDebt ? extractVmiAmount(bodyText) : undefined,
-    sodraDebtAmount: hasSodraDebt ? extractSodraAmount(bodyText) : undefined,
+    hasVmiDebt: vmiTotal > 0,
+    hasSodraDebt: sodraTotal > 0,
+    vmiDebtAmount: vmiTotal > 0 ? `${vmiMatch![1].trim()} Eur` : undefined,
+    sodraDebtAmount: sodraTotal > 0 ? `${sodraMatch![1].trim()} Eur` : undefined,
   };
 }
 
-// ── VMI detection ─────────────────────────────────────────────────────────────
-
-function detectVmiDebt(text: string): boolean {
-  const debtPatterns = [
-    /vmi\s+skola/i,
-    /mokestin[eė]\s+skola\s+vmi/i,
-    /mokestin[eė]\s+skola:/i,
-    /vmi.*(?:skola|[eė]skolinimas)/i,
-  ];
-  const noDebtPatterns = [
-    /mokestin[ių]\s+skol[ų]\s+n[eė]ra/i,
-    /vmi\s+(?:skol[ų]\s+)?n[eė]ra/i,
-    /n[eė]ra\s+vmi\s+skol[ų]/i,
-    /n[eė]turi\s+mokestin[ių]\s+skol[ų]/i,
-  ];
-
-  if (noDebtPatterns.some((p) => p.test(text))) return false;
-  if (debtPatterns.some((p) => p.test(text))) return true;
-  // Fall back to generic "no debt" — if page says no debts at all, assume no VMI debt
-  return false;
-}
-
-function extractVmiAmount(text: string): string | undefined {
-  const match = text.match(
-    /(?:vmi\s+skola|mokestin[eė]\s+skola)[:\s]+([\d\s]+(?:EUR|Eur|eur))/i
-  );
-  return match ? match[1].trim() : undefined;
-}
-
-// ── Sodra detection ───────────────────────────────────────────────────────────
-
-function detectSodraDebt(text: string): boolean {
-  const debtPatterns = [
-    /sodr[ao]s?\s+skola/i,
-    /socialinio\s+draudimo.*skola/i,
-    /vsd.*skola/i,
-  ];
-  const noDebtPatterns = [
-    /sodr[ao]s?\s+skol[ų]\s+n[eė]ra/i,
-    /sodr[ao]s?\s+(?:skol[ų]\s+)?n[eė]ra/i,
-    /n[eė]ra\s+sodr[ao]s?\s+skol[ų]/i,
-    /n[eė]turi\s+sodr[ao]s?\s+skol[ų]/i,
-  ];
-
-  if (noDebtPatterns.some((p) => p.test(text))) return false;
-  if (debtPatterns.some((p) => p.test(text))) return true;
-  // Fall back to generic "no debt"
-  return false;
-}
-
-function extractSodraAmount(text: string): string | undefined {
-  const match = text.match(
-    /sodr[ao]s?\s+skola[:\s]+([\d\s]+(?:EUR|Eur|eur))/i
-  );
-  return match ? match[1].trim() : undefined;
+function parseAmountValue(raw: string): number {
+  // "737 304,10" → 737304.10 ; "0" → 0
+  return parseFloat(raw.replace(/\s/g, "").replace(",", ".")) || 0;
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

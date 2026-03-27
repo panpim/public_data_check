@@ -1,58 +1,117 @@
 import { describe, it, expect } from "vitest";
 import { parseTaxCompliance } from "@/providers/rekvizitai-tax/search";
 
-describe("parseTaxCompliance", () => {
-  it("returns no debt when page says no tax debts", () => {
-    const result = parseTaxCompliance("Mokestinių skolų nėra\nSodros skolų nėra");
+// Minimal /skolos/ page fixtures that mirror the real page structure.
+const NO_DEBT_PAGE = `
+Įmonės skola VMI
+Pradelsta nepriemoka iš viso
+0 Eur
+Pradelsta atidėta nepriemoka
+0 Eur
+Įmonės skola Sodrai
+Skolos suma iš viso
+0 Eur
+Atidėta suma
+0 Eur
+`;
+
+const VMI_DEBT_PAGE = `
+Įmonės skola VMI
+Pradelsta nepriemoka iš viso
+737 304,10 Eur
+Pradelsta atidėta nepriemoka
+0 Eur
+Įmonės skola Sodrai
+Skolos suma iš viso
+0 Eur
+Atidėta suma
+0 Eur
+`;
+
+const SODRA_DEBT_PAGE = `
+Įmonės skola VMI
+Pradelsta nepriemoka iš viso
+0 Eur
+Pradelsta atidėta nepriemoka
+0 Eur
+Įmonės skola Sodrai
+Skolos suma iš viso
+15 730,83 Eur
+Atidėta suma
+0 Eur
+`;
+
+const BOTH_DEBTS_PAGE = `
+Įmonės skola VMI
+Pradelsta nepriemoka iš viso
+737 304,10 Eur
+Pradelsta atidėta nepriemoka
+0 Eur
+Įmonės skola Sodrai
+Skolos suma iš viso
+15 730,83 Eur
+Atidėta suma
+0 Eur
+`;
+
+// The page also has a "Kitų įmonių paskelbtos skolos" section with its own
+// "Skolos suma iš viso" line (which should NOT be mistaken for Sodra debt).
+const OTHER_COMPANIES_DEBT_ONLY = `
+Nauja Kitų įmonių paskelbtos skolos
+Skolos suma iš viso
+5 000 Eur
+Įmonės skola VMI
+Pradelsta nepriemoka iš viso
+0 Eur
+Įmonės skola Sodrai
+Skolos suma iš viso
+0 Eur
+`;
+
+describe("parseTaxCompliance (/skolos/ page format)", () => {
+  it("returns no debt when both totals are 0", () => {
+    const result = parseTaxCompliance(NO_DEBT_PAGE);
     expect(result.hasVmiDebt).toBe(false);
     expect(result.hasSodraDebt).toBe(false);
     expect(result.vmiDebtAmount).toBeUndefined();
     expect(result.sodraDebtAmount).toBeUndefined();
   });
 
-  it("returns no debt when page says no debts (alternative text)", () => {
-    const result = parseTaxCompliance("Skolų nėra\nĮsiskolinimų nėra");
-    expect(result.hasVmiDebt).toBe(false);
+  it("detects VMI debt and extracts amount", () => {
+    const result = parseTaxCompliance(VMI_DEBT_PAGE);
+    expect(result.hasVmiDebt).toBe(true);
+    expect(result.vmiDebtAmount).toBe("737 304,10 Eur");
     expect(result.hasSodraDebt).toBe(false);
+    expect(result.sodraDebtAmount).toBeUndefined();
   });
 
-  it("detects VMI debt with amount", () => {
-    const result = parseTaxCompliance(
-      "VMI skola: 1 200 EUR\nSodros skolų nėra"
-    );
-    expect(result.hasVmiDebt).toBe(true);
-    expect(result.vmiDebtAmount).toBe("1 200 EUR");
-    expect(result.hasSodraDebt).toBe(false);
-  });
-
-  it("detects Sodra debt with amount", () => {
-    const result = parseTaxCompliance(
-      "Mokestinių skolų nėra\nSodros skola: 3 500 EUR"
-    );
+  it("detects Sodra debt and extracts amount", () => {
+    const result = parseTaxCompliance(SODRA_DEBT_PAGE);
     expect(result.hasSodraDebt).toBe(true);
-    expect(result.sodraDebtAmount).toBe("3 500 EUR");
+    expect(result.sodraDebtAmount).toBe("15 730,83 Eur");
     expect(result.hasVmiDebt).toBe(false);
-  });
-
-  it("detects both VMI and Sodra debt", () => {
-    const result = parseTaxCompliance(
-      "VMI skola: 5 000 EUR\nSodros skola: 2 100 EUR"
-    );
-    expect(result.hasVmiDebt).toBe(true);
-    expect(result.hasSodraDebt).toBe(true);
-    expect(result.vmiDebtAmount).toBe("5 000 EUR");
-    expect(result.sodraDebtAmount).toBe("2 100 EUR");
-  });
-
-  it("detects VMI debt without amount when debt exists but no figure shown", () => {
-    const result = parseTaxCompliance("Mokestinė skola VMI\nSodros skolų nėra");
-    expect(result.hasVmiDebt).toBe(true);
     expect(result.vmiDebtAmount).toBeUndefined();
   });
 
-  it("does not suppress VMI debt when page contains unrelated nėra text near VMI", () => {
-    const result = parseTaxCompliance("VMI skola: 1 200 EUR\nVMI duomenų nėra apie kitus");
+  it("detects both VMI and Sodra debt simultaneously", () => {
+    const result = parseTaxCompliance(BOTH_DEBTS_PAGE);
     expect(result.hasVmiDebt).toBe(true);
-    expect(result.vmiDebtAmount).toBe("1 200 EUR");
+    expect(result.hasSodraDebt).toBe(true);
+    expect(result.vmiDebtAmount).toBe("737 304,10 Eur");
+    expect(result.sodraDebtAmount).toBe("15 730,83 Eur");
+  });
+
+  it("does not treat third-party company debts as Sodra debt", () => {
+    // The page has a 'Kitų įmonių paskelbtos skolos' section with its own
+    // 'Skolos suma iš viso' — it must not be confused with Sodra totals.
+    const result = parseTaxCompliance(OTHER_COMPANIES_DEBT_ONLY);
+    expect(result.hasSodraDebt).toBe(false);
+    expect(result.hasVmiDebt).toBe(false);
+  });
+
+  it("returns no debt when page has no recognised sections", () => {
+    const result = parseTaxCompliance("No relevant content here.");
+    expect(result.hasVmiDebt).toBe(false);
+    expect(result.hasSodraDebt).toBe(false);
   });
 });
