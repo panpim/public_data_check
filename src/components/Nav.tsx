@@ -47,7 +47,7 @@ export function Nav() {
         <div className="flex items-center gap-3">
           {country && (
             <Link
-              href="/select-country"
+              href="/select-country?change=true"
               className="text-xs font-medium px-2 py-1 rounded border border-border hover:bg-muted transition-colors"
               title="Change market"
             >

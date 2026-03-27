@@ -1,18 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Nav } from "@/components/Nav";
 
 type Country = "LT" | "PL";
 
 export default function SelectCountryPage() {
   const router = useRouter();
-  const [autoRedirecting, setAutoRedirecting] = useState(true);
+  const searchParams = useSearchParams();
+  const isChanging = searchParams.get("change") === "true";
+  const [autoRedirecting, setAutoRedirecting] = useState(!isChanging);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Skip auto-redirect if user explicitly navigated here to change their country
+    if (isChanging) return;
+
     // On mount: check if a DB preference exists and auto-restore the cookie
     fetch("/api/user/country")
       .then((r) => r.json())
@@ -36,7 +41,7 @@ export default function SelectCountryPage() {
       .catch(() => {
         setAutoRedirecting(false);
       });
-  }, [router]);
+  }, [router, isChanging]);
 
   async function handleSelect(country: Country) {
     setSaving(true);

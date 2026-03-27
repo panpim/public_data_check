@@ -38,92 +38,61 @@ export async function runKrzSearch(
 
     // Navigate to the search page
     await page.goto(KRZ_SEARCH_URL, { waitUntil: "load" });
-    await page.waitForTimeout(2000); // Allow Angular to bootstrap
 
-    // Select entity type tab/radio
+    // Wait for Angular to render the form — poll for any visible text input (up to 15s)
+    const firstInput = page.locator('input[type="text"]').first();
+    await firstInput.waitFor({ state: "visible", timeout: 15_000 });
+
+    // Select entity type tab/radio — use locator with text matching (faster, no long timeouts)
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
     if (entityLabel) {
-      const tabSelectors = [
-        `li:has-text("${entityLabel}")`,
-        `label:has-text("${entityLabel}")`,
-        `button:has-text("${entityLabel}")`,
-        `[title="${entityLabel}"]`,
-      ];
-      for (const sel of tabSelectors) {
-        try {
-          await page.click(sel, { timeout: 5_000 });
-          await page.waitForTimeout(500);
-          break;
-        } catch {
-          // try next selector
-        }
-      }
-    }
-
-    // Fill name field
-    const nameSelectors = [
-      'input[placeholder*="Nazwa" i]',
-      'input[placeholder*="nazwa" i]',
-      'input[ng-model*="name" i]',
-      'input[ng-model*="nazwa" i]',
-      'input[type="text"]:first-of-type',
-    ];
-    let nameFilled = false;
-    for (const sel of nameSelectors) {
+      const tab = page.locator(`li, label, button, a`).filter({ hasText: entityLabel }).first();
       try {
-        await page.waitForSelector(sel, { timeout: 5_000 });
-        await page.fill(sel, input.borrowerName.trim());
-        nameFilled = true;
-        break;
+        await tab.click({ timeout: 3_000 });
+        await page.waitForTimeout(500);
       } catch {
-        // try next
+        // entity type selector not found — proceed with default tab
       }
     }
-    if (!nameFilled) {
-      throw new Error(
-        "Could not locate the name field on KRZ. The page structure may have changed."
-      );
-    }
 
-    // Fill ID field if provided
+    // Fill name field — try specific selectors first, fall back to first visible text input
+    const nameInput =
+      (await page.locator('input[placeholder*="Nazwa" i]').count()) > 0
+        ? page.locator('input[placeholder*="Nazwa" i]').first()
+        : (await page.locator('input[ng-model*="nazwa" i], input[ng-model*="name" i]').count()) > 0
+        ? page.locator('input[ng-model*="nazwa" i], input[ng-model*="name" i]').first()
+        : page.locator('input[type="text"]').first();
+
+    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
+    await nameInput.fill(input.borrowerName.trim());
+
+    // Fill ID field if provided — use the second visible text input, or a labelled ID field
     if (input.idCode) {
-      const idSelectors = [
-        'input[placeholder*="KRS" i]',
-        'input[placeholder*="NIP" i]',
-        'input[placeholder*="numer" i]',
-        'input[ng-model*="krs" i]',
-        'input[ng-model*="nip" i]',
-      ];
-      for (const sel of idSelectors) {
-        try {
-          await page.waitForSelector(sel, { timeout: 3_000 });
-          await page.fill(sel, input.idCode.trim());
-          break;
-        } catch {
-          // field not found — proceed without it
+      try {
+        const idInput = page
+          .locator('input[placeholder*="KRS" i], input[placeholder*="NIP" i], input[placeholder*="numer" i], input[ng-model*="krs" i], input[ng-model*="nip" i]')
+          .first();
+        const idCount = await idInput.count();
+        if (idCount > 0) {
+          await idInput.fill(input.idCode.trim());
+        } else {
+          // Fall back to second text input (first is name, second is often ID)
+          const secondInput = page.locator('input[type="text"]').nth(1);
+          if ((await secondInput.count()) > 0) {
+            await secondInput.fill(input.idCode.trim());
+          }
         }
+      } catch {
+        // ID field not found — proceed without it
       }
     }
 
-    // Submit
-    const submitSelectors = [
-      'button[type="submit"]',
-      'button:has-text("Szukaj")',
-      'button:has-text("Wyszukaj")',
-      'input[type="submit"]',
-    ];
-    let submitted = false;
-    for (const sel of submitSelectors) {
-      try {
-        await page.click(sel, { timeout: 3_000 });
-        submitted = true;
-        break;
-      } catch {
-        // try next
-      }
-    }
-    if (!submitted) {
-      await page.keyboard.press("Enter");
+    // Submit — try button with text, then submit button type, then Enter
+    const submitBtn = page.locator('button:has-text("Szukaj"), button:has-text("Wyszukaj"), button[type="submit"]').first();
+    if ((await submitBtn.count()) > 0) {
+      await submitBtn.click({ timeout: 3_000 });
+    } else {
+      await nameInput.press("Enter");
     }
 
     // Wait for results to render
