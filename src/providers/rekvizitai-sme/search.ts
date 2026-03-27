@@ -168,7 +168,7 @@ function parseRevenue(text: string): number | undefined {
   return undefined;
 }
 
-function buildSmeSummary(
+export function buildSmeSummary(
   classification: SmeClassification,
   borrowerName: string
 ): string {

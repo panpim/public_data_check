@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getProvider } from "@/providers/registry";
+import { runRekvizitaiCombined } from "@/providers/rekvizitai/combined-search";
 import { generateEvidencePdf } from "@/services/evidence";
 import { extractFolderIdFromUrl, uploadFileToDrive } from "@/services/drive";
 import { db } from "@/lib/db";
@@ -95,8 +96,33 @@ export async function POST(req: NextRequest) {
   try {
     // Run providers sequentially to avoid launching multiple Chromium browsers
     // simultaneously, which causes socket exhaustion and navigation timeouts.
+    // When both rekvizitai providers are requested, run them in a single shared
+    // browser session to avoid navigating to the same company twice.
+    const keys = providerKeys as string[];
+    const hasSme = keys.includes("rekvizitai_sme");
+    const hasTax = keys.includes("rekvizitai_tax");
+    const useCombined = hasSme && hasTax;
+
     const results: NormalizedCheckResult[] = [];
-    for (const key of providerKeys as string[]) {
+
+    // Pre-fill rekvizitai results via the combined runner (one browser session).
+    let combinedSme: NormalizedCheckResult | undefined;
+    let combinedTax: NormalizedCheckResult | undefined;
+    if (useCombined) {
+      const combined = await runRekvizitaiCombined(input);
+      combinedSme = combined.sme;
+      combinedTax = combined.tax;
+    }
+
+    for (const key of keys) {
+      if (key === "rekvizitai_sme" && combinedSme) {
+        results.push(combinedSme);
+        continue;
+      }
+      if (key === "rekvizitai_tax" && combinedTax) {
+        results.push(combinedTax);
+        continue;
+      }
       const provider = getProvider(key)!;
       try {
         results.push(await provider.runSearch(input));

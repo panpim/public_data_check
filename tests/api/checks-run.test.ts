@@ -14,10 +14,14 @@ vi.mock("@/services/drive", () => ({
 vi.mock("@/lib/db", () => ({
   db: { searchRun: { create: vi.fn().mockResolvedValue({ id: "run-1" }) } },
 }));
+vi.mock("@/providers/rekvizitai/combined-search", () => ({
+  runRekvizitaiCombined: vi.fn(),
+}));
 
 import { POST } from "@/app/api/checks/run/route";
 import { getServerSession } from "next-auth";
 import { getProvider } from "@/providers/registry";
+import { runRekvizitaiCombined } from "@/providers/rekvizitai/combined-search";
 import { extractFolderIdFromUrl, uploadFileToDrive } from "@/services/drive";
 
 const mockSession = {
@@ -131,6 +135,10 @@ describe("POST /api/checks/run", () => {
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
     vi.mocked(getProvider).mockReturnValue({
       runSearch: vi.fn().mockResolvedValue(mockSearchResult),
+    });
+    vi.mocked(runRekvizitaiCombined).mockResolvedValue({
+      sme: { ...mockSearchResult, providerKey: "rekvizitai_sme", status: "qualified" },
+      tax: { ...mockSearchResult, providerKey: "rekvizitai_tax", status: "compliant" },
     });
     vi.mocked(uploadFileToDrive).mockResolvedValue({
       fileId: "file-1",

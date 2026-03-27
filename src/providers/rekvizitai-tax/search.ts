@@ -121,7 +121,7 @@ function parseAmountValue(raw: string): number {
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 
-function buildTaxSummary(
+export function buildTaxSummary(
   data: TaxComplianceData,
   borrowerName: string
 ): string {
