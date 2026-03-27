@@ -65,13 +65,21 @@ export async function runKrzSearch(
     }
 
     // Step 3: Navigate to the search page via JS hash navigation.
-    // Already on the domain — Angular treats this as an in-app route change,
-    // avoiding the post-authorize redirect that a fresh page.goto() triggers.
     await page.evaluate((url: string) => { window.location.href = url; }, KRZ_SEARCH_URL);
 
-    // Step 4: Wait for Angular to route to the search page.
-    await page.waitForURL(/WyszukiwaniePodmiotow/, { timeout: 20_000 });
-    await page.waitForTimeout(800);
+    // Step 4: Wait for BOTH conditions simultaneously:
+    //   - URL contains "WyszukiwaniePodmiotow" (Angular finished routing, including post-authorize)
+    //   - At least one visible input exists (form is rendered)
+    // waitForURL alone resolves immediately before Angular redirects away for post-authorize.
+    await page.waitForFunction(
+      () => {
+        const onSearchPage = window.location.href.includes("WyszukiwaniePodmiotow");
+        const hasInput = document.querySelector("input:not([type=hidden])") !== null;
+        return onSearchPage && hasInput;
+      },
+      { timeout: 30_000 }
+    );
+    await page.waitForTimeout(300);
 
     // Step 5: Select entity type tab.
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
@@ -82,11 +90,11 @@ export async function runKrzSearch(
       } catch { /* proceed with the default (first) tab */ }
     }
 
-    // Step 6: Wait for inputs to render, then fill by position.
+    // Step 6: Fill inputs by position.
     //   nth(0) = "Nazwa podmiotu"
     //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"
     const nameInput = page.locator("input").nth(0);
-    await nameInput.waitFor({ state: "visible", timeout: 10_000 });
+    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
     await nameInput.fill(input.borrowerName.trim());
 
     if (input.idCode) {
