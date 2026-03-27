@@ -33,12 +33,16 @@ export async function navigateToCompanyProfile(
     // Dialog not present — already dismissed in this session.
   }
 
-  // Step 2: Fill the search form. The homepage form uses input[name="name"] for
-  // company name and input[name="company_code"] for the registry code.
+  // Step 2: Fill the search form.
+  // When an ID code is provided it uniquely identifies the company, so search
+  // by code alone — the name the user typed may differ from the registry name
+  // and would filter out the correct result. When no code is available, search
+  // by name only.
   await page.waitForSelector("input[name='name']", { timeout: 10_000 });
-  await page.fill("input[name='name']", borrowerName.trim());
   if (idCode) {
     await page.fill("input[name='company_code']", idCode.trim());
+  } else {
+    await page.fill("input[name='name']", borrowerName.trim());
   }
 
   // Step 3: Submit and wait for navigation to the search results page (/imones/1/).
@@ -74,8 +78,9 @@ export async function navigateToCompanyProfile(
   });
 
   if (profileLinks.length === 0) {
+    const searchedBy = idCode ? `ID code "${idCode}"` : `name "${borrowerName}"`;
     throw new Error(
-      `No company found on rekvizitai.vz.lt matching "${borrowerName}" ` +
+      `No company found on rekvizitai.vz.lt for ${searchedBy} ` +
       `(page after search: ${currentUrl})`
     );
   }
