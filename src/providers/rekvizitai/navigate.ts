@@ -132,31 +132,22 @@ export async function screenshotCroppedAtRecommendations(
   page: Page
 ): Promise<Buffer> {
   try {
-    const cropY = await page.evaluate(function (): number {
-      // The section header is an H3 (or similar heading) with class "title"
-      // whose trimmed text is exactly "Taip pat rekomenduojame".
-      var candidates = Array.from(
-        document.querySelectorAll("h1, h2, h3, h4, h5, h6, .title")
-      );
-      for (var i = 0; i < candidates.length; i++) {
-        var el = candidates[i];
-        var text = (el.innerText || "").trim();
-        if (/^taip\s+pat\s+rekomenduojame$/i.test(text)) {
-          var rect = el.getBoundingClientRect();
-          // rect.top is viewport-relative; add scrollY for the absolute page offset.
-          return Math.round(rect.top + window.scrollY - 16);
-        }
-      }
-      return 0;
-    });
+    // Use Playwright's locator + boundingBox which correctly handles off-screen
+    // elements in headless mode (unlike getBoundingClientRect inside evaluate).
+    // The recommendations block has the structure:
+    //   <h3 class="title">Taip pat rekomenduojame</h3>
+    //   <div class="list-item"><div class="company highlighted">...
+    const heading = page.locator('h3.title', { hasText: /^Taip pat rekomenduojame$/i }).first();
+    const box = await heading.boundingBox({ timeout: 5_000 });
 
-    if (cropY > 200) {
+    if (box && box.y > 200) {
       const viewport = page.viewportSize();
       const pageWidth = viewport?.width ?? 1280;
+      const cropY = Math.round(box.y - 16);
       return await page.screenshot({ clip: { x: 0, y: 0, width: pageWidth, height: cropY } });
     }
   } catch {
-    // fall through to full-page
+    // heading not found or off-screen — fall through to full-page
   }
   return page.screenshot({ fullPage: true });
 }
