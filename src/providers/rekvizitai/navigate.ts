@@ -131,23 +131,5 @@ function isCompanyProfileUrl(url: string): boolean {
 export async function screenshotCroppedAtRecommendations(
   page: Page
 ): Promise<Buffer> {
-  try {
-    // Use Playwright's locator + boundingBox which correctly handles off-screen
-    // elements in headless mode (unlike getBoundingClientRect inside evaluate).
-    // The recommendations block has the structure:
-    //   <h3 class="title">Taip pat rekomenduojame</h3>
-    //   <div class="list-item"><div class="company highlighted">...
-    const heading = page.locator('h3.title', { hasText: /^Taip pat rekomenduojame$/i }).first();
-    const box = await heading.boundingBox({ timeout: 5_000 });
-
-    if (box && box.y > 200) {
-      const viewport = page.viewportSize();
-      const pageWidth = viewport?.width ?? 1280;
-      const cropY = Math.round(box.y - 16);
-      return await page.screenshot({ clip: { x: 0, y: 0, width: pageWidth, height: cropY } });
-    }
-  } catch {
-    // heading not found or off-screen — fall through to full-page
-  }
   return page.screenshot({ fullPage: true });
 }
