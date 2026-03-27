@@ -74,39 +74,43 @@ export async function runKrzSearch(
       { timeout: 20_000 }
     ).catch(() => {}); // ignore — if no redirect, continue
 
-    // Step 4: Wait for the form to render — use exact known label text from the KRZ UI.
-    // "Nazwa podmiotu" is the name field label; wait for it to be visible as the form-ready signal.
-    const nameInput = page.getByLabel("Nazwa podmiotu");
-    await nameInput.waitFor({ state: "visible", timeout: 15_000 });
+    // Step 4: Wait for the search form to render.
+    // KRZ uses Angular Material floating labels — getByLabel() won't work because
+    // the label elements are NOT associated with inputs via for/id.
+    // Instead, wait for the page heading "WYSZUKIWANIE PODMIOTÓW" as the form-ready signal.
+    await page.locator("text=/wyszukiwanie podmiot/i").first()
+      .waitFor({ state: "visible", timeout: 15_000 });
+    // Give Angular a moment to finish rendering inputs after the heading appears
+    await page.waitForTimeout(500);
 
-    // Step 5: Select entity type tab — exact Polish label text from the KRZ tabs.
+    // Step 5: Select entity type tab by clicking on the exact tab text.
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
     if (entityLabel) {
       try {
-        const tab = page.locator(`li, label, button, a, span`).filter({ hasText: new RegExp(`^${entityLabel}$`) }).first();
-        if ((await tab.count()) > 0) {
-          await tab.click({ timeout: 3_000 });
-          await page.waitForTimeout(800);
-        }
-      } catch { /* proceed with default entity type */ }
+        // Tabs appear as clickable elements containing the exact entity type text
+        await page.locator(`text="${entityLabel}"`).first().click({ timeout: 3_000 });
+        await page.waitForTimeout(800);
+      } catch { /* proceed with the default (first) tab */ }
     }
 
-    // Step 6: Fill the name field.
+    // Step 6: Fill fields by position — the form has exactly two inputs in order:
+    //   nth(0) = "Nazwa podmiotu"  (name)
+    //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"  (ID)
+    const nameInput = page.locator("input").nth(0);
+    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
     await nameInput.fill(input.borrowerName.trim());
 
-    // Step 7: Fill the ID field if provided.
-    // Label: "Identyfikator (KRS, NIP lub inny identyfikator)"
     if (input.idCode) {
       try {
-        const idInput = page.getByLabel(/Identyfikator/i);
+        const idInput = page.locator("input").nth(1);
         if ((await idInput.count()) > 0) {
           await idInput.fill(input.idCode.trim());
         }
       } catch { /* ID field not found — proceed without it */ }
     }
 
-    // Step 8: Submit — exact button text "Wyszukaj".
-    await page.getByRole("button", { name: "Wyszukaj" }).click({ timeout: 5_000 });
+    // Step 7: Click "Wyszukaj" button.
+    await page.locator(`button:has-text("Wyszukaj")`).first().click({ timeout: 5_000 });
 
     // Wait for results to render
     await page.waitForLoadState("load", { timeout: RESULT_TIMEOUT }).catch(() => {});
