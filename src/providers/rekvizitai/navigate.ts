@@ -123,8 +123,8 @@ function isCompanyProfileUrl(url: string): boolean {
 
 /**
  * Take a screenshot of the current page, cropped just above the
- * "Taip pat rekomenduokame" (Also recommended) section that appears
- * below the relevant content on rekvizitai.vz.lt pages.
+ * "Taip pat rekomenduojame" (yellow recommended-companies section) that
+ * appears below the relevant content on rekvizitai.vz.lt pages.
  *
  * Falls back to a full-page screenshot if the section is not found.
  */
@@ -132,30 +132,28 @@ export async function screenshotCroppedAtRecommendations(
   page: Page
 ): Promise<Buffer> {
   try {
-    const cropHeight = await page.evaluate((): number => {
-      // Find the first element whose text starts with "Taip pat rekomenduokame"
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      let node: Text | null;
-      while ((node = walker.nextNode() as Text | null)) {
-        if (/taip\s+pat\s+rekomenuojame|taip\s+pat\s+rekomenduojame/i.test(node.textContent ?? "")) {
-          const rect = node.parentElement?.getBoundingClientRect();
-          if (rect) return Math.round(window.scrollY + rect.top - 20);
+    const cropY = await page.evaluate(function (): number {
+      // The section header is an H3 (or similar heading) with class "title"
+      // whose trimmed text is exactly "Taip pat rekomenduojame".
+      var candidates = Array.from(
+        document.querySelectorAll("h1, h2, h3, h4, h5, h6, .title")
+      );
+      for (var i = 0; i < candidates.length; i++) {
+        var el = candidates[i];
+        var text = (el.innerText || "").trim();
+        if (/^taip\s+pat\s+rekomenduojame$/i.test(text)) {
+          var rect = el.getBoundingClientRect();
+          // rect.top is viewport-relative; add scrollY for the absolute page offset.
+          return Math.round(rect.top + window.scrollY - 16);
         }
       }
-      // Also try heading/section elements with that text
-      for (const el of Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,p,span,section"))) {
-        if (/taip\s+pat\s+rekomenuojame|taip\s+pat\s+rekomenduojame/i.test((el as HTMLElement).innerText ?? "")) {
-          const rect = el.getBoundingClientRect();
-          if (rect) return Math.round(window.scrollY + rect.top - 20);
-        }
-      }
-      return 0; // not found
+      return 0;
     });
 
-    if (cropHeight > 200) {
+    if (cropY > 200) {
       const viewport = page.viewportSize();
       const pageWidth = viewport?.width ?? 1280;
-      return await page.screenshot({ clip: { x: 0, y: 0, width: pageWidth, height: cropHeight } });
+      return await page.screenshot({ clip: { x: 0, y: 0, width: pageWidth, height: cropY } });
     }
   } catch {
     // fall through to full-page
