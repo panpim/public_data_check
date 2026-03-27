@@ -36,10 +36,22 @@ export async function runKrzSearch(
     const page = await context.newPage();
     page.setDefaultTimeout(NAV_TIMEOUT);
 
-    // Navigate to the search page
-    await page.goto(KRZ_SEARCH_URL, { waitUntil: "load" });
+    // Step 1: Load the base URL first so Angular can establish its session.
+    // Going directly to the deep-link URL triggers a /post-authorize redirect chain
+    // that must complete before the search form is rendered.
+    await page.goto(KRZ_BASE_URL, { waitUntil: "networkidle", timeout: NAV_TIMEOUT });
 
-    // Wait for Angular to render the form — poll for any visible text input (up to 15s)
+    // Step 2: Navigate to the search page now that a session exists.
+    await page.goto(KRZ_SEARCH_URL, { waitUntil: "load", timeout: NAV_TIMEOUT });
+
+    // Step 3: Wait for the Angular route to settle and the form to render.
+    // If the page is still in a post-authorize redirect, wait for it to resolve.
+    await page.waitForFunction(
+      () => !window.location.href.includes("post-authorize"),
+      { timeout: 20_000 }
+    );
+
+    // Wait for any visible text input (form is ready)
     const firstInput = page.locator('input[type="text"]').first();
     await firstInput.waitFor({ state: "visible", timeout: 15_000 });
 
