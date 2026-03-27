@@ -36,11 +36,20 @@ export async function runKrzSearch(
     const page = await context.newPage();
     page.setDefaultTimeout(NAV_TIMEOUT);
 
-    // Step 1: Load base URL so Angular can bootstrap and set up its session.
-    await page.goto(KRZ_BASE_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
-    await page.waitForTimeout(2_500);
+    // Step 1: Navigate directly to the search URL (matches manual process).
+    // User confirmed they go directly to the long hash URL, not base URL first.
+    await page.goto(KRZ_SEARCH_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
 
-    // Step 2: Dismiss cookie consent banner if present.
+    // Step 2: Handle any post-authorize redirect and wait for the search form to load.
+    // Angular may redirect through post-authorize, then back to the search page.
+    await page.waitForFunction(
+      () => !window.location.href.includes("post-authorize"),
+      { timeout: 25_000 }
+    ).catch(() => {}); // ignore if no redirect happens
+
+    await page.waitForTimeout(2_000); // let Angular finish rendering
+
+    // Step 3: Dismiss cookie consent banner if present.
     const cookieSelectors = [
       'button:has-text("Akceptuję")',
       'button:has-text("Akceptuj")',
@@ -63,23 +72,6 @@ export async function runKrzSearch(
         }
       } catch { /* not found, try next */ }
     }
-
-    // Step 3: Navigate to the search page via JS hash navigation.
-    await page.evaluate((url: string) => { window.location.href = url; }, KRZ_SEARCH_URL);
-
-    // Step 4: Wait for BOTH conditions simultaneously:
-    //   - URL contains "WyszukiwaniePodmiotow" (Angular finished routing, including post-authorize)
-    //   - At least one visible input exists (form is rendered)
-    // waitForURL alone resolves immediately before Angular redirects away for post-authorize.
-    await page.waitForFunction(
-      () => {
-        const onSearchPage = window.location.href.includes("WyszukiwaniePodmiotow");
-        const hasInput = document.querySelector("input:not([type=hidden])") !== null;
-        return onSearchPage && hasInput;
-      },
-      { timeout: 30_000 }
-    );
-    await page.waitForTimeout(300);
 
     // Step 5: Select entity type tab.
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
