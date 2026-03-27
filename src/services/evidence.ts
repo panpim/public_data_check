@@ -175,6 +175,32 @@ export async function generateEvidencePdf(
       drawRow(detailPage, regular, bold, "Sodra Debt:", td.hasSodraDebt ? `YES${td.sodraDebtAmount ? ` — ${td.sodraDebtAmount}` : ""}` : "None", margin, dy);
     }
 
+    // ── Inline screenshot on the same detail page ──────────────────────────
+    if (result.screenshotBuffer) {
+      try {
+        dy -= 16;
+        drawSection(detailPage, bold, "Screenshot", margin, dy, pw - margin * 2);
+        dy -= 12;
+        detailPage.drawText(`Source: ${sanitizeForPdf(result.sourceUrl)}`, {
+          x: margin, y: dy, font: regular, size: 7, color: GREY,
+        });
+        dy -= 10;
+
+        const pngImage = await doc.embedPng(result.screenshotBuffer);
+        const availableHeight = dy - margin - 30; // leave room for footer
+        const imgDims = pngImage.scaleToFit(pw - margin * 2, availableHeight);
+        detailPage.drawImage(pngImage, {
+          x: margin,
+          y: dy - imgDims.height,
+          width: imgDims.width,
+          height: imgDims.height,
+        });
+        dy -= imgDims.height;
+      } catch {
+        // screenshot embed failed — structured data already on page, skip silently
+      }
+    }
+
     // Footer
     detailPage.drawLine({
       start: { x: margin, y: margin + 20 },
@@ -185,33 +211,6 @@ export async function generateEvidencePdf(
       `Run Group: ${runGroupId}   |   CONFIDENTIAL — INTERNAL USE ONLY`,
       { x: margin, y: margin + 6, font: regular, size: 7, color: GREY }
     );
-  }
-
-  // ── Final pages: Screenshots (one per provider, grouped at end) ────────────
-  for (const result of results) {
-    if (!result.screenshotBuffer) continue;
-    try {
-      const screenshotPage = doc.addPage(PageSizes.A4);
-      const { width: sw, height: sh } = screenshotPage.getSize();
-
-      screenshotPage.drawText(`Screenshot — ${getProviderLabel(result.providerKey)}`, {
-        x: margin, y: sh - margin - 16, font: bold, size: 12, color: BRAND_BLUE,
-      });
-      screenshotPage.drawText(`Source: ${result.sourceUrl}`, {
-        x: margin, y: sh - margin - 32, font: regular, size: 8, color: GREY,
-      });
-
-      const pngImage = await doc.embedPng(result.screenshotBuffer);
-      const imgDims = pngImage.scaleToFit(sw - margin * 2, sh - margin * 2 - 60);
-      screenshotPage.drawImage(pngImage, {
-        x: margin,
-        y: sh - margin - 60 - imgDims.height,
-        width: imgDims.width,
-        height: imgDims.height,
-      });
-    } catch {
-      // If embedding fails, skip this screenshot — other pages remain valid
-    }
   }
 
   const pdfBytes = await doc.save();

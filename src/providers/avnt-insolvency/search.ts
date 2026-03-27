@@ -64,21 +64,22 @@ export async function runAvntSearch(
     }
 
     if (input.idCode) {
-      const idFieldSelectors = [
-        'input[aria-label="Juridinio asmens kodas"]',
-        'input[name="kodas"]',
-        'input[name="code"]',
-        'input[placeholder*="kodas" i]',
-        'input[placeholder*="code" i]',
-      ];
-      for (const selector of idFieldSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 2_000 });
-          await page.fill(selector, input.idCode);
-          break;
-        } catch {
-          // field not present — that is fine, ID is optional
-        }
+      // The ID code field lives inside the collapsed "Daugiau parinkčių" (More options)
+      // section (#more-content). Expand it first, then fill the field.
+      try {
+        await page.click("a.c-content-toggle-link", { timeout: 5_000 });
+        await page.waitForSelector("#more-content:not(.collapse)", { timeout: 5_000 });
+      } catch {
+        // toggle not found or already expanded — continue
+      }
+      try {
+        const idSelector = 'input[aria-label="Juridinio asmens kodas"]';
+        await page.waitForSelector(idSelector, { state: "visible", timeout: 5_000 });
+        await page.click(idSelector);
+        await page.fill(idSelector, "");
+        await page.locator(idSelector).pressSequentially(input.idCode, { delay: 40 });
+      } catch {
+        // field not available — proceed with name-only search
       }
     }
 

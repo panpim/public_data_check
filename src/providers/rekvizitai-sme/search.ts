@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { navigateToCompanyProfile } from "@/providers/rekvizitai/navigate";
+import { navigateToCompanyProfile, screenshotCroppedAtRecommendations } from "@/providers/rekvizitai/navigate";
 import type {
   NormalizedCheckResult,
   RunCheckInput,
@@ -30,7 +30,7 @@ export async function runSmeSearch(
 
     await navigateToCompanyProfile(page, input.borrowerName, input.idCode);
 
-    const screenshotBuffer = await page.screenshot({ fullPage: true });
+    const screenshotBuffer = await screenshotCroppedAtRecommendations(page);
     const finalUrl = page.url();
     const bodyText = await page.evaluate(() => document.body.innerText);
 

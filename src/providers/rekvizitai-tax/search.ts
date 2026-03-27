@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { navigateToCompanyProfile } from "@/providers/rekvizitai/navigate";
+import { navigateToCompanyProfile, screenshotCroppedAtRecommendations } from "@/providers/rekvizitai/navigate";
 import type {
   NormalizedCheckResult,
   RunCheckInput,
@@ -37,7 +37,7 @@ export async function runTaxSearch(
     await page.goto(skolosUrl, { waitUntil: "load" });
     await page.waitForTimeout(1000);
 
-    const screenshotBuffer = await page.screenshot({ fullPage: true });
+    const screenshotBuffer = await screenshotCroppedAtRecommendations(page);
     const finalUrl = page.url();
     const bodyText = await page.evaluate(() => document.body.innerText);
 
