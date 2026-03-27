@@ -23,6 +23,7 @@ interface HistoryRow {
   resultStatus: ResultStatus;
   resultsCount: number;
   uploadedFileUrl: string | null;
+  country: string | null;
 }
 
 const STATUS_BADGE: Record<
@@ -146,6 +147,7 @@ export function HistoryTable() {
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
+              <TableHead>Country</TableHead>
               <TableHead>Borrower</TableHead>
               <TableHead>Registry</TableHead>
               <TableHead>Result</TableHead>
@@ -157,7 +159,7 @@ export function HistoryTable() {
             {runs.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="text-center text-muted-foreground py-8"
                 >
                   {loading ? "Loading…" : "No checks run yet"}
@@ -174,6 +176,9 @@ export function HistoryTable() {
                 <TableRow key={run.id}>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                     {new Date(run.createdAt).toLocaleDateString("en-GB")}
+                  </TableCell>
+                  <TableCell className="text-xs font-medium text-muted-foreground">
+                    {run.country ?? "LT"}
                   </TableCell>
                   <TableCell className="font-medium text-sm">
                     {run.borrowerName}

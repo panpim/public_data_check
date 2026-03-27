@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
         resultsCount: true,
         matchedSummary: true,
         uploadedFileUrl: true,
+        country: true,
       },
     }),
     db.searchRun.count({ where }),
