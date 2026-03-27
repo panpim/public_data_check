@@ -82,11 +82,20 @@ export async function runKrzSearch(
       } catch { /* proceed with the default (first) tab */ }
     }
 
-    // Step 6: Fill inputs by position.
+    // Step 6: Diagnostic - capture what we see before looking for inputs
+    console.log("Current URL:", page.url());
+    const debugScreenshot = await page.screenshot({ fullPage: true });
+    console.log("Screenshot taken, looking for inputs...");
+
+    // Count all inputs in the page
+    const inputCount = await page.locator("input").count();
+    console.log("Total inputs found:", inputCount);
+
+    // Fill inputs by position.
     //   nth(0) = "Nazwa podmiotu"
     //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"
     const nameInput = page.locator("input").nth(0);
-    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
+    await nameInput.waitFor({ state: "visible", timeout: 10_000 });
     await nameInput.fill(input.borrowerName.trim());
 
     if (input.idCode) {
