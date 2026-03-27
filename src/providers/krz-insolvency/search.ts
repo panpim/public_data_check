@@ -36,12 +36,11 @@ export async function runKrzSearch(
     const page = await context.newPage();
     page.setDefaultTimeout(NAV_TIMEOUT);
 
-    // Step 1: Load the base URL first so Angular can establish its session.
+    // Step 1: Load base URL so Angular can bootstrap and set up its session.
     await page.goto(KRZ_BASE_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
-    await page.waitForTimeout(3_000);
+    await page.waitForTimeout(2_500);
 
-    // Dismiss cookie consent banner if present (common on Polish government portals).
-    // Try the most common accept-button patterns; silently skip if not found.
+    // Step 2: Dismiss cookie consent banner if present.
     const cookieSelectors = [
       'button:has-text("Akceptuję")',
       'button:has-text("Akceptuj")',
@@ -65,39 +64,31 @@ export async function runKrzSearch(
       } catch { /* not found, try next */ }
     }
 
-    // Step 2: Navigate to the search page.
-    await page.goto(KRZ_SEARCH_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+    // Step 3: Click the "Wyszukiwanie podmiotów" nav link to navigate within the Angular SPA.
+    // This is more reliable than goto(hash URL) because Angular handles the routing natively.
+    // The nav link text is "Wyszukiwanie podmiotów" (visible in the left sidebar).
+    await page.locator('a, li').filter({ hasText: /^Wyszukiwanie podmiotów$/ }).first()
+      .click({ timeout: 5_000 });
 
-    // Step 3: Wait for any post-authorize redirect to resolve (Angular hash routing).
-    await page.waitForFunction(
-      () => !window.location.href.includes("post-authorize"),
-      { timeout: 20_000 }
-    ).catch(() => {}); // ignore — if no redirect, continue
+    // Step 4: Wait until the URL contains the search page identifier — confirms Angular
+    // has finished routing to the correct page (not still on post-authorize or landing).
+    await page.waitForURL(/WyszukiwaniePodmiotow/, { timeout: 20_000 });
+    await page.waitForTimeout(800);
 
-    // Step 4: Wait for the search form to render.
-    // KRZ uses Angular Material floating labels — getByLabel() won't work because
-    // the label elements are NOT associated with inputs via for/id.
-    // Instead, wait for the page heading "WYSZUKIWANIE PODMIOTÓW" as the form-ready signal.
-    await page.locator("text=/wyszukiwanie podmiot/i").first()
-      .waitFor({ state: "visible", timeout: 15_000 });
-    // Give Angular a moment to finish rendering inputs after the heading appears
-    await page.waitForTimeout(500);
-
-    // Step 5: Select entity type tab by clicking on the exact tab text.
+    // Step 5: Select entity type tab.
     const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
     if (entityLabel) {
       try {
-        // Tabs appear as clickable elements containing the exact entity type text
         await page.locator(`text="${entityLabel}"`).first().click({ timeout: 3_000 });
         await page.waitForTimeout(800);
       } catch { /* proceed with the default (first) tab */ }
     }
 
-    // Step 6: Fill fields by position — the form has exactly two inputs in order:
-    //   nth(0) = "Nazwa podmiotu"  (name)
-    //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"  (ID)
+    // Step 6: Wait for inputs to render, then fill by position.
+    //   nth(0) = "Nazwa podmiotu"
+    //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"
     const nameInput = page.locator("input").nth(0);
-    await nameInput.waitFor({ state: "visible", timeout: 5_000 });
+    await nameInput.waitFor({ state: "visible", timeout: 10_000 });
     await nameInput.fill(input.borrowerName.trim());
 
     if (input.idCode) {
@@ -106,11 +97,11 @@ export async function runKrzSearch(
         if ((await idInput.count()) > 0) {
           await idInput.fill(input.idCode.trim());
         }
-      } catch { /* ID field not found — proceed without it */ }
+      } catch { /* ID field not available — proceed without it */ }
     }
 
-    // Step 7: Click "Wyszukaj" button.
-    await page.locator(`button:has-text("Wyszukaj")`).first().click({ timeout: 5_000 });
+    // Step 7: Click the "Wyszukaj" submit button.
+    await page.locator('button:has-text("Wyszukaj")').first().click({ timeout: 5_000 });
 
     // Wait for results to render
     await page.waitForLoadState("load", { timeout: RESULT_TIMEOUT }).catch(() => {});
