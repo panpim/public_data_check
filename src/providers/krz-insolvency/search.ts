@@ -40,6 +40,31 @@ export async function runKrzSearch(
     await page.goto(KRZ_BASE_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
     await page.waitForTimeout(3_000);
 
+    // Dismiss cookie consent banner if present (common on Polish government portals).
+    // Try the most common accept-button patterns; silently skip if not found.
+    const cookieSelectors = [
+      'button:has-text("Akceptuję")',
+      'button:has-text("Akceptuj")',
+      'button:has-text("Zgadzam się")',
+      'button:has-text("Zaakceptuj")',
+      'button:has-text("Accept")',
+      'button:has-text("OK")',
+      '[class*="cookie"] button',
+      '[id*="cookie"] button',
+      '[class*="consent"] button',
+      '[id*="consent"] button',
+    ];
+    for (const sel of cookieSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        if ((await btn.count()) > 0) {
+          await btn.click({ timeout: 2_000 });
+          await page.waitForTimeout(500);
+          break;
+        }
+      } catch { /* not found, try next */ }
+    }
+
     // Step 2: Navigate to the search page.
     await page.goto(KRZ_SEARCH_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
 
