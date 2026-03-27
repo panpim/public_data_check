@@ -3,7 +3,8 @@ import type { DefaultSession } from "next-auth";
 export type CheckProviderKey =
   | "avnt_insolvency"
   | "rekvizitai_sme"
-  | "rekvizitai_tax";
+  | "rekvizitai_tax"
+  | "krz_insolvency";
 
 export type SearchType =
   | "individual"       // LT: natural person
