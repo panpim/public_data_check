@@ -15,9 +15,15 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, isNaN(rawPage) ? 1 : rawPage);
   const limit = Math.min(100, Math.max(1, isNaN(rawLimit) ? 20 : rawLimit));
   const skip = (page - 1) * limit;
+  const q = searchParams.get("q")?.trim() || undefined;
+
+  const where = q
+    ? { borrowerName: { contains: q, mode: "insensitive" as const } }
+    : undefined;
 
   const [runs, total] = await Promise.all([
     db.searchRun.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
@@ -35,7 +41,7 @@ export async function GET(req: NextRequest) {
         uploadedFileUrl: true,
       },
     }),
-    db.searchRun.count(),
+    db.searchRun.count({ where }),
   ]);
 
   return NextResponse.json({ runs, total, page, limit });

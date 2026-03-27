@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ResultStatus } from "@/lib/types";
 
 interface HistoryRow {
@@ -64,13 +65,17 @@ export function HistoryTable() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const limit = 20;
 
-  const fetchPage = useCallback(async (p: number) => {
+  const fetchPage = useCallback(async (p: number, q: string) => {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch(`/api/history?page=${p}&limit=${limit}`);
+      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
+      if (q.trim()) params.set("q", q.trim());
+      const res = await fetch(`/api/history?${params}`);
       const data = await res.json();
       if (!res.ok) {
         setFetchError(data.error ?? "Failed to load history");
@@ -85,13 +90,26 @@ export function HistoryTable() {
   }, []);
 
   useEffect(() => {
-    fetchPage(1);
+    fetchPage(1, query);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPage]);
+
+  const handleQueryChange = (value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchPage(1, value), 300);
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="space-y-4">
+      <Input
+        placeholder="Search by borrower name…"
+        value={query}
+        onChange={(e) => handleQueryChange(e.target.value)}
+        className="max-w-sm"
+      />
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {total} run{total !== 1 ? "s" : ""} total
@@ -100,7 +118,7 @@ export function HistoryTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchPage(page - 1)}
+            onClick={() => fetchPage(page - 1, query)}
             disabled={page <= 1 || loading}
           >
             Previous
@@ -111,7 +129,7 @@ export function HistoryTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchPage(page + 1)}
+            onClick={() => fetchPage(page + 1, query)}
             disabled={page >= totalPages || loading}
           >
             Next
