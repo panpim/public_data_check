@@ -28,6 +28,7 @@ export async function uploadFileToDrive(
   const drive = google.drive({ version: "v3", auth });
 
   const response = await drive.files.create({
+    supportsAllDrives: true,
     requestBody: {
       name: filename,
       parents: [folderId],

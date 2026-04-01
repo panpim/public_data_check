@@ -2,18 +2,28 @@ import { chromium } from "playwright";
 import type { NormalizedCheckResult, RunCheckInput } from "@/lib/types";
 
 export const KRZ_BASE_URL = "https://krz.ms.gov.pl";
-// Direct hash URL for the subject search page
-const KRZ_SEARCH_URL =
-  "https://krz.ms.gov.pl/#!/application/KRZPortalPUB/1.9/KrzRejPubGui.WyszukiwaniePodmiotow?params=JTdCJTdE&itemId=item-2&seq=0";
+const KRZ_HASH =
+  "#!/application/KRZPortalPUB/1.9/KrzRejPubGui.WyszukiwaniePodmiotow?params=JTdCJTdE&itemId=item-2&seq=0";
 
 const NAV_TIMEOUT = 30_000;
-const RESULT_TIMEOUT = 15_000;
 
-// Maps our searchType values to the Polish label text on KRZ tabs/radios
-const ENTITY_TYPE_LABELS: Record<string, string> = {
-  pl_company: "Podmiot niebędący osobą fizyczną",
-  pl_business_ind: "Osoba fizyczna prowadząca działalność gospodarczą",
-  pl_private_ind: "Osoba fizyczna nieprowadząca działalności gospodarczej",
+// Tab anchor IDs from the KRZ DOM (stable PrimeNG tab labels)
+const ENTITY_TAB_ID: Record<string, string> = {
+  pl_company: "ui-tabpanel-0-label",
+  pl_business_ind: "ui-tabpanel-1-label",
+  pl_private_ind: "ui-tabpanel-2-label",
+};
+
+// Stable input IDs per entity type, from the KRZ DOM
+const ENTITY_NAME_FIELD_ID: Record<string, string> = {
+  pl_company: "nazwa_firmy",
+  pl_business_ind: "firma",
+  pl_private_ind: "", // no name field — identifier only
+};
+const ENTITY_ID_FIELD_ID: Record<string, string> = {
+  pl_company: "inny_id",
+  pl_business_ind: "identyfikator",
+  pl_private_ind: "inny_id_os_fiz",
 };
 
 export async function runKrzSearch(
@@ -34,33 +44,27 @@ export async function runKrzSearch(
     });
 
     const page = await context.newPage();
-    page.setDefaultTimeout(NAV_TIMEOUT);
 
-    // Step 1: Navigate directly to the search URL (matches manual process).
-    // User confirmed they go directly to the long hash URL, not base URL first.
-    await page.goto(KRZ_SEARCH_URL, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+    page.on("console", (msg) => console.log("BROWSER:", msg.type(), msg.text()));
+    page.on("pageerror", (err) => console.log("PAGE ERROR:", err.message));
+    page.on("requestfailed", (req) =>
+      console.log("REQUEST FAILED:", req.url(), req.failure()?.errorText)
+    );
 
-    // Step 2: Handle any post-authorize redirect and wait for the search form to load.
-    // Angular may redirect through post-authorize, then back to the search page.
-    await page.waitForFunction(
-      () => !window.location.href.includes("post-authorize"),
-      { timeout: 25_000 }
-    ).catch(() => {}); // ignore if no redirect happens
+    // Step 1: Load base URL so Angular shell boots, then navigate via hash
+    await page.goto(KRZ_BASE_URL, { waitUntil: "load", timeout: NAV_TIMEOUT });
+    await page.waitForTimeout(3_000);
 
-    await page.waitForTimeout(2_000); // let Angular finish rendering
-
-    // Step 3: Dismiss cookie consent banner if present.
+    // Step 2: Dismiss cookie consent if present
     const cookieSelectors = [
       'button:has-text("Akceptuję")',
       'button:has-text("Akceptuj")',
       'button:has-text("Zgadzam się")',
       'button:has-text("Zaakceptuj")',
       'button:has-text("Accept")',
-      'button:has-text("OK")',
       '[class*="cookie"] button',
       '[id*="cookie"] button',
       '[class*="consent"] button',
-      '[id*="consent"] button',
     ];
     for (const sel of cookieSelectors) {
       try {
@@ -70,53 +74,100 @@ export async function runKrzSearch(
           await page.waitForTimeout(500);
           break;
         }
-      } catch { /* not found, try next */ }
+      } catch { /* not found */ }
     }
 
-    // Step 5: Select entity type tab.
-    const entityLabel = ENTITY_TYPE_LABELS[input.searchType];
-    if (entityLabel) {
-      try {
-        await page.locator(`text="${entityLabel}"`).first().click({ timeout: 3_000 });
-        await page.waitForTimeout(800);
-      } catch { /* proceed with the default (first) tab */ }
+    // Step 3: Set the hash route — triggers the Angular router on the outer shell
+    await page.evaluate((hash) => { window.location.hash = hash; }, KRZ_HASH);
+
+    // Step 4: Wait for the KRZ search iframe to attach.
+    // The actual form lives inside a cross-origin iframe hosted on
+    // krz-rejpub-gui-krz-pub-prod.apps.ocp.prod.ms.gov.pl — not the outer page.
+    let appFrame = page.frames().find(f => f.url().includes("krz-rejpub-gui"));
+    if (!appFrame) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("KRZ iframe did not attach within 20s")), 20_000);
+        const check = () => {
+          const f = page.frames().find(fr => fr.url().includes("krz-rejpub-gui"));
+          if (f) { clearTimeout(timer); appFrame = f; resolve(); }
+        };
+        page.on("frameattached", check);
+        page.on("framenavigated", check);
+      });
+    }
+    if (!appFrame) throw new Error("KRZ iframe not found");
+    console.log("iframe URL:", appFrame.url());
+
+    // Step 5: Wait for form to mount inside the iframe
+    await appFrame.locator("#nazwa_firmy").waitFor({ state: "visible", timeout: 20_000 });
+    console.log("Form ready inside iframe.");
+
+    // Step 6: Click the entity type tab
+    const tabId = ENTITY_TAB_ID[input.searchType];
+    if (tabId) {
+      await appFrame.locator(`#${tabId}`).click();
+      await page.waitForTimeout(500);
     }
 
-    // Step 6: Diagnostic - capture what we see before looking for inputs
-    console.log("Current URL:", page.url());
-    const debugScreenshot = await page.screenshot({ fullPage: true });
-    console.log("Screenshot taken, looking for inputs...");
-
-    // Count all inputs in the page
-    const inputCount = await page.locator("input").count();
-    console.log("Total inputs found:", inputCount);
-
-    // Fill inputs by position.
-    //   nth(0) = "Nazwa podmiotu"
-    //   nth(1) = "Identyfikator (KRS, NIP lub inny identyfikator)"
-    const nameInput = page.locator("input").nth(0);
-    await nameInput.waitFor({ state: "visible", timeout: 10_000 });
-    await nameInput.fill(input.borrowerName.trim());
-
-    if (input.idCode) {
-      try {
-        const idInput = page.locator("input").nth(1);
-        if ((await idInput.count()) > 0) {
-          await idInput.fill(input.idCode.trim());
-        }
-      } catch { /* ID field not available — proceed without it */ }
+    // Step 7: Fill name field (may not exist for pl_private_ind)
+    const nameFieldId = ENTITY_NAME_FIELD_ID[input.searchType];
+    if (nameFieldId && input.borrowerName.trim()) {
+      await appFrame.locator(`#${nameFieldId}`).waitFor({ state: "visible", timeout: 10_000 });
+      await appFrame.locator(`#${nameFieldId}`).fill(input.borrowerName.trim());
     }
 
-    // Step 7: Click the "Wyszukaj" submit button.
-    await page.locator('button:has-text("Wyszukaj")').first().click({ timeout: 5_000 });
+    // Step 8: Fill identifier field
+    const idFieldId = ENTITY_ID_FIELD_ID[input.searchType];
+    if (idFieldId && input.idCode?.trim()) {
+      await appFrame.locator(`#${idFieldId}`).waitFor({ state: "visible", timeout: 10_000 });
+      await appFrame.locator(`#${idFieldId}`).fill(input.idCode.trim());
+    }
 
-    // Wait for results to render
-    await page.waitForLoadState("load", { timeout: RESULT_TIMEOUT }).catch(() => {});
-    await page.waitForTimeout(2_500);
+    console.log("Fields filled. Clicking Wyszukaj...");
+
+    // Step 9: Click Wyszukaj inside the iframe.
+    // #butoonWyszukaj is inside hideDesktopResolution (hidden at desktop viewport).
+    // #butoonWyszukajMobile is inside hideMobileResolution (visible at desktop viewport).
+    // Target the desktop-visible one directly.
+    await appFrame.locator("#butoonWyszukajMobile").waitFor({ state: "visible", timeout: 5_000 });
+    await appFrame.locator("#butoonWyszukajMobile").click();
+
+    // Step 10: Wait for search to complete — two possible end states:
+    // - results found:    "Liczba podmiotów: N" badge appears
+    // - no results found: "Nie zostały znalezione żadne pozycje..." message appears
+    await appFrame.waitForFunction(
+      () =>
+        document.body.innerText.includes("Liczba podmiotów") ||
+        document.body.innerText.includes("Nie zostały znalezione"),
+      { timeout: 20_000 }
+    );
+
+    // Wait for "Proszę czekać" (loading overlay) to disappear
+    await appFrame.locator("text=Proszę czekać").waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {});
+
+    // Poll until the iframe content height stops growing (Angular panel animations complete)
+    let stableHeight = 0;
+    for (let i = 0; i < 15; i++) {
+      const h = await appFrame.evaluate(() =>
+        Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
+      );
+      if (h === stableHeight) break;
+      stableHeight = h;
+      await page.waitForTimeout(400);
+    }
+
+    // Resize the iframe element on the outer page to its full content height
+    await page.evaluate((h) => {
+      document.querySelectorAll("iframe").forEach((el) => {
+        el.style.height = `${h}px`;
+        el.style.minHeight = `${h}px`;
+      });
+    }, stableHeight);
+    await page.waitForTimeout(300);
 
     const screenshotBuffer = await page.screenshot({ fullPage: true });
-    const finalUrl = page.url();
-    const bodyText = await page.evaluate(() => document.body.innerText);
+    const finalUrl = appFrame.url();
+    const bodyText = await appFrame.evaluate(() => document.body.innerText);
 
     const { status, resultsCount, matchedEntities, summaryText } =
       parseKrzResults(bodyText, input.borrowerName);
@@ -135,7 +186,6 @@ export async function runKrzSearch(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Capture a diagnostic screenshot if the browser/page is still open
     let diagScreenshot: Buffer | undefined;
     try {
       if (browser) {
@@ -145,7 +195,7 @@ export async function runKrzSearch(
           diagScreenshot = await activePage.screenshot({ fullPage: true });
         }
       }
-    } catch { /* ignore screenshot errors */ }
+    } catch { /* ignore */ }
     return {
       providerKey: "krz_insolvency",
       sourceUrl: KRZ_BASE_URL,
@@ -176,12 +226,10 @@ export function parseKrzResults(
 > {
   const lower = bodyText.toLowerCase();
 
-  // Primary signal: count string "Wyświetlanie X - Y z Z wyników"
-  const countMatch = bodyText.match(
-    /wyświetlanie\s+\d+\s*[-–]\s*\d+\s+z\s+(\d+)\s+wyników/i
-  );
-  if (countMatch) {
-    const count = parseInt(countMatch[1], 10);
+  // "Liczba podmiotów: N" — shown in the results counter badge
+  const countBadge = bodyText.match(/liczba\s+podmiotów:\s*(\d+)/i);
+  if (countBadge) {
+    const count = parseInt(countBadge[1], 10);
     const matchedEntities = extractEntities(bodyText, borrowerName);
     if (count === 0) {
       return {
@@ -207,8 +255,28 @@ export function parseKrzResults(
     };
   }
 
+  // Secondary: "Wyświetlanie X - Y z Z wyników"
+  const countMatch = bodyText.match(
+    /wyświetlanie\s+\d+\s*[-–]\s*\d+\s+z\s+(\d+)\s+wyników/i
+  );
+  if (countMatch) {
+    const count = parseInt(countMatch[1], 10);
+    const matchedEntities = extractEntities(bodyText, borrowerName);
+    if (count === 0) {
+      return { status: "no_match", resultsCount: 0, matchedEntities: [], summaryText: `No insolvency records found on KRZ for "${borrowerName}".` };
+    }
+    if (count === 1) {
+      return { status: "match_found", resultsCount: 1, matchedEntities, summaryText: `1 insolvency record found on KRZ matching "${borrowerName}".` };
+    }
+    return { status: "ambiguous", resultsCount: count, matchedEntities, summaryText: `${count} insolvency records found on KRZ for "${borrowerName}". Manual review required.` };
+  }
+
   // Explicit no-result signal
-  if (lower.includes("brak wyników") || lower.includes("nie znaleziono")) {
+  if (
+    lower.includes("brak wyników") ||
+    lower.includes("nie znaleziono") ||
+    lower.includes("nie zostały znalezione")
+  ) {
     return {
       status: "no_match",
       resultsCount: 0,
@@ -217,7 +285,6 @@ export function parseKrzResults(
     };
   }
 
-  // Fallback: ambiguous — could not parse
   return {
     status: "ambiguous",
     resultsCount: 0,

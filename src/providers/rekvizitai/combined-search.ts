@@ -61,7 +61,7 @@ export async function runRekvizitaiCombined(
 
     // ── Tax: navigate to /skolos/ sub-page ──────────────────────────────────
     const profileUrl = page.url().replace(/\/?$/, "/");
-    await page.goto(`${profileUrl}skolos/`, { waitUntil: "load" });
+    await page.goto(`${profileUrl}skolos/`, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForTimeout(1000);
 
     const taxScreenshot = await screenshotCroppedAtRecommendations(page);
