@@ -34,7 +34,7 @@ export async function runTaxSearch(
     // VMI and Sodra debt totals directly rather than requiring regex on prose text.
     const profileUrl = page.url().replace(/\/?$/, "/");
     const skolosUrl = `${profileUrl}skolos/`;
-    await page.goto(skolosUrl, { waitUntil: "load" });
+    await page.goto(skolosUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForTimeout(1000);
 
     const screenshotBuffer = await screenshotCroppedAtRecommendations(page);
