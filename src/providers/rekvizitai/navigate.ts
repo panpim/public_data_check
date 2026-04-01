@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 
 const REKVIZITAI_BASE_URL = "https://rekvizitai.vz.lt/";
-const NAV_TIMEOUT = 30_000;
+const NAV_TIMEOUT = 60_000;
 
 /**
  * Navigate an existing Playwright page to the company profile on rekvizitai.vz.lt.
@@ -21,7 +21,7 @@ export async function navigateToCompanyProfile(
 
   // Step 1: Load the homepage and accept the CookieBot consent banner so the
   // search form and AJAX results render correctly.
-  await page.goto(REKVIZITAI_BASE_URL, { waitUntil: "load" });
+  await page.goto(REKVIZITAI_BASE_URL, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1000);
   try {
     await page.waitForSelector("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll", {
@@ -88,7 +88,7 @@ export async function navigateToCompanyProfile(
   if (profileLinks.length === 1) {
     const href = profileLinks[0];
     const url = href.startsWith("http") ? href : `${REKVIZITAI_BASE_URL}${href.replace(/^\//, "")}`;
-    await page.goto(url, { waitUntil: "load" });
+    await page.goto(url, { waitUntil: "domcontentloaded" });
     return;
   }
 
@@ -97,7 +97,7 @@ export async function navigateToCompanyProfile(
   if (idCode) {
     for (const href of profileLinks.slice(0, 5)) {
       const url = href.startsWith("http") ? href : `${REKVIZITAI_BASE_URL}${href.replace(/^\//, "")}`;
-      await page.goto(url, { waitUntil: "load" });
+      await page.goto(url, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(500);
       const bodyText = await page.evaluate(() => document.body.innerText);
       if (bodyText.includes(idCode.trim())) {
