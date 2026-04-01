@@ -103,8 +103,8 @@ export function classifySme(bodyText: string): SmeClassification {
 
 function parseEmployees(text: string): number | undefined {
   const patterns = [
-    // "4 darbuotojai" (nominative, ≤9) or "13 darbuotojų" (genitive, 10+)
-    /(\d+)\s+darbuotoj[uų]?\b/i,
+    // any Lithuanian case form: darbuotojas (×1), darbuotojai (×2–9), darbuotojų (×10+), etc.
+    /(\d+)\s+darbuotoj\S*/i,
     // labelled variants
     /darbuotoj[uų]\s+skai[cč]ius[:\s]+(\d[\d\s]*)/i,
     /darbuotoj[uų]\s+sk\.[:\s]+(\d[\d\s]*)/i,

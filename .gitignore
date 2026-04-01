@@ -43,3 +43,6 @@ next-env.d.ts
 *.db
 
 /src/generated/prisma
+
+# internal tooling
+.superpowers/
