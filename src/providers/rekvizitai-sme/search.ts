@@ -103,6 +103,9 @@ export function classifySme(bodyText: string): SmeClassification {
 
 function parseEmployees(text: string): number | undefined {
   const patterns = [
+    // "4 darbuotojai" (nominative, ≤9) or "13 darbuotojų" (genitive, 10+)
+    /(\d+)\s+darbuotoj[uų]?\b/i,
+    // labelled variants
     /darbuotoj[uų]\s+skai[cč]ius[:\s]+(\d[\d\s]*)/i,
     /darbuotoj[uų]\s+sk\.[:\s]+(\d[\d\s]*)/i,
     /employees?[:\s]+(\d[\d\s]*)/i,
@@ -122,38 +125,19 @@ function parseEmployees(text: string): number | undefined {
 function parseRevenue(text: string): number | undefined {
   // Patterns for "X mln. EUR", "X tūkst. EUR", or "X EUR" (with spaces as thousands sep)
   const patterns: Array<{ re: RegExp; multiplier: number }> = [
-    {
-      re: /apyvarta[:\s]+([\d\s,.]+)\s*mln\.?\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1_000_000,
-    },
-    {
-      re: /paja?mos[:\s]+([\d\s,.]+)\s*mln\.?\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1_000_000,
-    },
-    {
-      re: /apyvarta[:\s]+([\d\s,.]+)\s*tūkst\.?\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1_000,
-    },
-    {
-      re: /paja?mos[:\s]+([\d\s,.]+)\s*tūkst\.?\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1_000,
-    },
-    {
-      re: /apyvarta[:\s]+([\d\s]+)\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1,
-    },
-    {
-      re: /paja?mos[:\s]+([\d\s]+)\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1,
-    },
-    {
-      re: /revenue[:\s]+([\d\s,.]+)\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1,
-    },
-    {
-      re: /turnover[:\s]+([\d\s,.]+)\s*(?:EUR|Eur|eur)/i,
-      multiplier: 1,
-    },
+    // mln. EUR/€
+    { re: /apyvarta[:\s]+([\d\s,.]+)\s*mln\.?\s*(?:EUR|Eur|eur|€)/i, multiplier: 1_000_000 },
+    { re: /paja?mos[:\s]+([\d\s,.]+)\s*mln\.?\s*(?:EUR|Eur|eur|€)/i, multiplier: 1_000_000 },
+    // tūkst. EUR/€
+    { re: /apyvarta[:\s]+([\d\s,.]+)\s*tūkst\.?\s*(?:EUR|Eur|eur|€)/i, multiplier: 1_000 },
+    { re: /paja?mos[:\s]+([\d\s,.]+)\s*tūkst\.?\s*(?:EUR|Eur|eur|€)/i, multiplier: 1_000 },
+    // plain EUR or €  (e.g. "251 042 €" or "251 042 EUR")
+    { re: /apyvarta[:\s]+([\d\s]+)\s*(?:EUR|Eur|eur|€)/i, multiplier: 1 },
+    { re: /paja?mos[:\s]+([\d\s]+)\s*(?:EUR|Eur|eur|€)/i, multiplier: 1 },
+    // "Pardavimo pajamos\n251 042 €" — label on its own line, value on next
+    { re: /pardavimo\s+paja?mos[\s\S]{0,30}?([\d][\d\s]{1,15})\s*€/i, multiplier: 1 },
+    { re: /revenue[:\s]+([\d\s,.]+)\s*(?:EUR|Eur|eur|€)/i, multiplier: 1 },
+    { re: /turnover[:\s]+([\d\s,.]+)\s*(?:EUR|Eur|eur|€)/i, multiplier: 1 },
   ];
 
   for (const { re, multiplier } of patterns) {

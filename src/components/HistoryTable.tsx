@@ -67,15 +67,17 @@ export function HistoryTable() {
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [countryFilter, setCountryFilter] = useState<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const limit = 20;
 
-  const fetchPage = useCallback(async (p: number, q: string) => {
+  const fetchPage = useCallback(async (p: number, q: string, country: string) => {
     setLoading(true);
     setFetchError(null);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(limit) });
       if (q.trim()) params.set("q", q.trim());
+      if (country) params.set("country", country);
       const res = await fetch(`/api/history?${params}`);
       const data = await res.json();
       if (!res.ok) {
@@ -91,26 +93,42 @@ export function HistoryTable() {
   }, []);
 
   useEffect(() => {
-    fetchPage(1, query);
+    fetchPage(1, query, countryFilter);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPage]);
 
   const handleQueryChange = (value: string) => {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchPage(1, value), 300);
+    debounceRef.current = setTimeout(() => fetchPage(1, value, countryFilter), 300);
+  };
+
+  const handleCountryChange = (value: string) => {
+    setCountryFilter(value);
+    fetchPage(1, query, value);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="space-y-4">
-      <Input
-        placeholder="Search by borrower name…"
-        value={query}
-        onChange={(e) => handleQueryChange(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="Search by borrower name…"
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          className="max-w-sm"
+        />
+        <select
+          value={countryFilter}
+          onChange={(e) => handleCountryChange(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+        >
+          <option value="">All countries</option>
+          <option value="LT">🇱🇹 LT</option>
+          <option value="PL">🇵🇱 PL</option>
+        </select>
+      </div>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {total} run{total !== 1 ? "s" : ""} total
@@ -119,7 +137,7 @@ export function HistoryTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchPage(page - 1, query)}
+            onClick={() => fetchPage(page - 1, query, countryFilter)}
             disabled={page <= 1 || loading}
           >
             Previous
@@ -130,7 +148,7 @@ export function HistoryTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchPage(page + 1, query)}
+            onClick={() => fetchPage(page + 1, query, countryFilter)}
             disabled={page >= totalPages || loading}
           >
             Next
