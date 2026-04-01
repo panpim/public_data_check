@@ -16,8 +16,13 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, Math.max(1, isNaN(rawLimit) ? 20 : rawLimit));
   const skip = (page - 1) * limit;
   const q = searchParams.get("q")?.trim() || undefined;
+  const countryParam = searchParams.get("country")?.trim() || undefined;
+  const country = countryParam && ["LT", "PL"].includes(countryParam) ? countryParam : undefined;
 
-  const where = q ? { borrowerName: { contains: q } } : undefined;
+  const where = {
+    ...(q ? { borrowerName: { contains: q } } : {}),
+    ...(country ? { country } : {}),
+  };
 
   const [runs, total] = await Promise.all([
     db.searchRun.findMany({

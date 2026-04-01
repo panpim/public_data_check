@@ -6,7 +6,7 @@ import { HistoryTable } from "@/components/HistoryTable";
 
 export default async function HistoryPage() {
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/api/auth/signin");
+  if (!session) redirect("/api/auth/signin?callbackUrl=/history");
 
   return (
     <div className="min-h-screen bg-background">
