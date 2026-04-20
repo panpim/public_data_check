@@ -54,7 +54,7 @@ export async function runRekvizitaiCombined(
       status: smeStatus,
       resultsCount: 0,
       matchedEntities: [],
-      summaryText: buildSmeSummary(classification, input.borrowerName),
+      summaryText: buildSmeSummary(classification, input.borrowerName || input.idCode || "unknown"),
       screenshotBuffer: smeScreenshot,
       classification,
     };
@@ -81,7 +81,7 @@ export async function runRekvizitaiCombined(
       status: taxStatus,
       resultsCount: 0,
       matchedEntities: [],
-      summaryText: buildTaxSummary(complianceData, input.borrowerName),
+      summaryText: buildTaxSummary(complianceData, input.borrowerName || input.idCode || "unknown"),
       screenshotBuffer: taxScreenshot,
       complianceData,
     };

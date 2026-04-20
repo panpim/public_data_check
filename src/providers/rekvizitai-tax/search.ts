@@ -57,7 +57,7 @@ export async function runTaxSearch(
       status,
       resultsCount: 0,
       matchedEntities: [],
-      summaryText: buildTaxSummary(complianceData, input.borrowerName),
+      summaryText: buildTaxSummary(complianceData, input.borrowerName || input.idCode || "unknown"),
       screenshotBuffer,
       complianceData,
     };

@@ -169,8 +169,9 @@ export async function runKrzSearch(
     const finalUrl = appFrame.url();
     const bodyText = await appFrame.evaluate(() => document.body.innerText);
 
+    const displayName = input.borrowerName || input.idCode || "unknown";
     const { status, resultsCount, matchedEntities, summaryText } =
-      parseKrzResults(bodyText, input.borrowerName);
+      parseKrzResults(bodyText, displayName);
 
     return {
       providerKey: "krz_insolvency",

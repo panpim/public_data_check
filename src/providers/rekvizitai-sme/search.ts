@@ -50,7 +50,7 @@ export async function runSmeSearch(
       status,
       resultsCount: 0,
       matchedEntities: [],
-      summaryText: buildSmeSummary(classification, input.borrowerName),
+      summaryText: buildSmeSummary(classification, input.borrowerName || input.idCode || "unknown"),
       screenshotBuffer,
       classification,
     };

@@ -63,11 +63,20 @@ export async function POST(req: NextRequest) {
   const allowedProviders = country === "PL" ? PL_PROVIDERS : LT_PROVIDERS;
   const providerKeys = body.providerKeys;
 
-  if (!borrowerName.trim()) {
-    return NextResponse.json(
-      { error: "borrowerName is required" },
-      { status: 400 }
-    );
+  if (searchType === "individual") {
+    if (!borrowerName.trim()) {
+      return NextResponse.json(
+        { error: "borrowerName is required for individual searches" },
+        { status: 400 }
+      );
+    }
+  } else {
+    if (!idCode?.trim()) {
+      return NextResponse.json(
+        { error: "idCode is required" },
+        { status: 400 }
+      );
+    }
   }
 
   const folderId = extractFolderIdFromUrl(driveFolderUrl);
@@ -167,7 +176,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const safeName = input.borrowerName
+    const safeName = (input.borrowerName || input.idCode || "search")
       .replace(/\s+/g, "-")
       .replace(/[^a-zA-Z0-9\-]/g, "-")
       .toLowerCase();

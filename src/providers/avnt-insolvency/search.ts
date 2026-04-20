@@ -45,10 +45,12 @@ export async function runAvntSearch(
     for (const selector of nameFieldSelectors) {
       try {
         await page.waitForSelector(selector, { timeout: 3_000 });
-        await page.click(selector);
-        await page.fill(selector, "");
-        // Type character by character so AngularJS detects each keystroke
-        await page.locator(selector).pressSequentially(input.borrowerName, { delay: 40 });
+        if (input.borrowerName.trim()) {
+          await page.click(selector);
+          await page.fill(selector, "");
+          // Type character by character so AngularJS detects each keystroke
+          await page.locator(selector).pressSequentially(input.borrowerName, { delay: 40 });
+        }
         nameFieldFilled = true;
         break;
       } catch {
@@ -56,14 +58,14 @@ export async function runAvntSearch(
       }
     }
 
-    if (!nameFieldFilled) {
+    if (!nameFieldFilled && input.borrowerName.trim()) {
       throw new Error(
         "Could not locate the borrower name field on the AVNT page. " +
           "The page structure may have changed — update nameFieldSelectors in search.ts."
       );
     }
 
-    if (input.idCode) {
+    if (input.idCode && input.searchType !== "individual") {
       // The ID code field lives inside the collapsed "Daugiau parinkčių" (More options)
       // section (#more-content). Expand it first, then fill the field.
       try {
@@ -115,8 +117,9 @@ export async function runAvntSearch(
     const finalUrl = page.url();
     const bodyText = await page.evaluate(() => document.body.innerText);
 
+    const displayName = input.borrowerName || input.idCode || "unknown";
     const { status, resultsCount, matchedEntities, summaryText } =
-      parseAvntResults(bodyText, input.borrowerName);
+      parseAvntResults(bodyText, displayName);
 
     return {
       providerKey: "avnt_insolvency",

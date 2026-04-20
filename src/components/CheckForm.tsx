@@ -111,8 +111,8 @@ export function CheckForm({ country }: CheckFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          borrowerName,
-          idCode: idCode || undefined,
+          borrowerName: borrowerName || undefined,
+          idCode,
           driveFolderUrl,
           searchType: getSearchType(),
           providerKeys,
@@ -178,28 +178,37 @@ export function CheckForm({ country }: CheckFormProps) {
           )}
         </div>
 
-        {/* Borrower Name */}
-        <div className="space-y-2">
-          <Label htmlFor="borrowerName">Borrower Name *</Label>
-          <Input
-            id="borrowerName"
-            value={borrowerName}
-            onChange={(e) => setBorrowerName(e.target.value)}
-            placeholder={isLT ? "e.g. UAB Pavyzdys" : "e.g. ABC Sp. z o.o."}
-            required
-          />
-        </div>
-
         {/* ID Code */}
         <div className="space-y-2">
           <Label htmlFor="idCode">
-            {isLT ? "ID Code (optional)" : "KRS / NIP / PESEL (optional)"}
+            {isLT && ltSearchType === "individual"
+              ? "ID Code (optional)"
+              : isLT
+              ? "ID Code *"
+              : "KRS / NIP / PESEL *"}
           </Label>
           <Input
             id="idCode"
             value={idCode}
             onChange={(e) => setIdCode(e.target.value)}
             placeholder={isLT ? "Company or person code" : "KRS, NIP or PESEL number"}
+            required={!(isLT && ltSearchType === "individual")}
+          />
+        </div>
+
+        {/* Borrower Name */}
+        <div className="space-y-2">
+          <Label htmlFor="borrowerName">
+            {isLT && ltSearchType === "individual"
+              ? "Borrower Name *"
+              : "Borrower Name (optional)"}
+          </Label>
+          <Input
+            id="borrowerName"
+            value={borrowerName}
+            onChange={(e) => setBorrowerName(e.target.value)}
+            placeholder={isLT ? "e.g. Jonas Jonaitis" : "e.g. ABC Sp. z o.o."}
+            required={isLT && ltSearchType === "individual"}
           />
         </div>
 
