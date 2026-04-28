@@ -102,6 +102,11 @@ export function CheckForm({ country }: CheckFormProps) {
       return;
     }
 
+    if (idCode.trim() && !/^\d+$/.test(idCode.trim())) {
+      setError("ID code must contain digits only — no letters or special characters.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResponse(null);

@@ -60,4 +60,22 @@ describe("classifySme", () => {
     expect(result.category).toBe("sme");
     expect(result.annualRevenue).toBe(500_000);
   });
+
+  it("parses 'Darbuotojai\\t19 darbuotojų' key-value table format (actual Rekvizitai layout)", () => {
+    // Rekvizitai shows: "\tDarbo laikas\tI-V 08:00-17:00\n\tDarbuotojai\t19 darbuotojų - apdraustųjų"
+    // The old generic pattern matched the "0" from "17:00" across the newline to "Darbuotojai"
+    const result = classifySme(
+      "\tDarbo laikas\tI-V 08:00-17:00\n\tDarbuotojai\t19 darbuotojų - apdraustųjų\nApyvarta: 500 tūkst. EUR"
+    );
+    expect(result.employeesCount).toBe(19);
+    expect(result.category).toBe("sme");
+  });
+
+  it("parses 'darbuotojų skaičius yra 19' sentence format (actual Rekvizitai layout)", () => {
+    const result = classifySme(
+      "įmonės darbuotojų skaičius yra 19. Apyvarta: 500 tūkst. EUR"
+    );
+    expect(result.employeesCount).toBe(19);
+    expect(result.category).toBe("sme");
+  });
 });

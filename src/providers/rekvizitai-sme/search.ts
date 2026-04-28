@@ -103,14 +103,19 @@ export function classifySme(bodyText: string): SmeClassification {
 
 function parseEmployees(text: string): number | undefined {
   const patterns = [
-    // any Lithuanian case form: darbuotojas (×1), darbuotojai (×2–9), darbuotojų (×10+), etc.
-    /(\d+)\s+darbuotoj\S*/i,
-    // labelled variants
+    // "Darbuotojų skaičius yra 19" — Rekvizitai summary sentence format
+    /darbuotoj[uų]\s+skai[cč]ius\s+\w+\s+(\d+)/i,
+    // "Darbuotojai\t19 darbuotojų" — Rekvizitai key-value table format
+    /Darbuotojai[ \t]+(\d+)[ \t]+darbuotoj/i,
+    // labelled variants with colon/whitespace separator
     /darbuotoj[uų]\s+skai[cč]ius[:\s]+(\d[\d\s]*)/i,
     /darbuotoj[uų]\s+sk\.[:\s]+(\d[\d\s]*)/i,
     /employees?[:\s]+(\d[\d\s]*)/i,
     /staff[:\s]+(\d[\d\s]*)/i,
     /personnel[:\s]+(\d[\d\s]*)/i,
+    // generic fallback: "19 darbuotojų" on the same line only
+    // ([ \t]+ instead of \s+ to avoid crossing newlines, e.g. "17:00\nDarbuotojai")
+    /(\d+)[ \t]+darbuotoj\S*/i,
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);

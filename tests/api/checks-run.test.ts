@@ -149,6 +149,7 @@ describe("POST /api/checks/run", () => {
       makeReq({
         ...validBody,
         searchType: "legal_entity",
+        idCode: "162535950",
         providerKeys: ["avnt_insolvency", "rekvizitai_sme", "rekvizitai_tax"],
       })
     );
@@ -174,6 +175,51 @@ describe("POST /api/checks/run", () => {
     expect(json.results).toHaveLength(1);
   });
 
+  it("returns 400 when idCode contains letters (LT legal entity)", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "legal_entity",
+        idCode: "SIMSE",
+        providerKeys: ["avnt_insolvency"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/digits only/i);
+  });
+
+  it("returns 400 when idCode contains letters (PL company)", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "pl_company",
+        idCode: "ABC-123",
+        providerKeys: ["krz_insolvency"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/digits only/i);
+  });
+
+  it("returns 400 when optional LT individual idCode contains letters", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
+    vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
+    const res = await POST(
+      makeReq({
+        ...validBody,
+        searchType: "individual",
+        idCode: "Jonas Jonaitis",
+        providerKeys: ["avnt_insolvency"],
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/digits only/i);
+  });
+
   it("returns 400 for invalid searchType", async () => {
     vi.mocked(getServerSession).mockResolvedValue(mockSession as any);
     vi.mocked(extractFolderIdFromUrl).mockReturnValue("folder-id");
@@ -193,6 +239,7 @@ describe("POST /api/checks/run", () => {
       makeReq({
         ...validBody,
         searchType: "pl_company",
+        idCode: "1234567890",
         providerKeys: ["avnt_insolvency"],
       })
     );
@@ -208,6 +255,7 @@ describe("POST /api/checks/run", () => {
       makeReq({
         ...validBody,
         searchType: "legal_entity",
+        idCode: "162535950",
         providerKeys: ["krz_insolvency"],
       })
     );

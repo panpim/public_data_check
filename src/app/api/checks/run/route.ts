@@ -79,6 +79,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (idCode?.trim() && !/^\d+$/.test(idCode.trim())) {
+    return NextResponse.json(
+      { error: "idCode must contain digits only" },
+      { status: 400 }
+    );
+  }
+
   const folderId = extractFolderIdFromUrl(driveFolderUrl);
   if (!folderId) {
     return NextResponse.json(
